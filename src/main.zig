@@ -1,9 +1,66 @@
 const std = @import("std");
 
-pub fn main() !void {
-    // You can use print statements as follows for debugging, they'll be visible when running tests.
-    std.debug.print("Logs from your program will appear here!\n", .{});
+const TokenType = enum {
+    VAR, // var
+    IDENTIFIER, // variable names
+    EQUAL, // =
+    STRING, // "string"
+    LEFT_PAREN, // (
+    RIGHT_PAREN, // )
+    SEMICOLON, // ;
+    EOF,
+};
 
+const Token = struct {
+    tokenType: TokenType, // VAR
+    lexeme: []const u8, // 123
+    literal: ?[]u8, // 123
+};
+
+const EOFToken = Token{
+    .tokenType = TokenType.EOF,
+    .lexeme = "",
+    .literal = null,
+};
+
+const LParenToken = Token{
+    .tokenType = TokenType.LEFT_PAREN,
+    .lexeme = "(",
+    .literal = null,
+};
+
+const RParenToken = Token{
+    .tokenType = TokenType.RIGHT_PAREN,
+    .lexeme = ")",
+    .literal = null,
+};
+
+const MyErrors = error{
+    TokenNotFound,
+};
+
+fn match(i: u8) MyErrors!Token {
+    switch (i) {
+        '(' => {
+            return LParenToken;
+        },
+        ')' => {
+            return RParenToken;
+        },
+        0 => {
+            return EOFToken;
+        },
+        else => {
+            return MyErrors.TokenNotFound;
+        },
+    }
+}
+
+fn printToken(token: Token) !void {
+    try std.io.getStdOut().writer().print("{s} {s} {any}\n", .{ @tagName(token.tokenType), token.lexeme, token.literal });
+}
+
+pub fn main() !void {
     const args = try std.process.argsAlloc(std.heap.page_allocator);
     defer std.process.argsFree(std.heap.page_allocator, args);
 
@@ -23,10 +80,17 @@ pub fn main() !void {
     const file_contents = try std.fs.cwd().readFileAlloc(std.heap.page_allocator, filename, std.math.maxInt(usize));
     defer std.heap.page_allocator.free(file_contents);
 
-    // Uncomment this block to pass the first stage
     if (file_contents.len > 0) {
-        @panic("Scanner not implemented");
+        for (file_contents) |i| {
+            if (i == '\n') {
+                continue;
+            }
+            const token = try match(i);
+            try printToken(token);
+        }
     } else {
-        try std.io.getStdOut().writer().print("EOF  null\n", .{}); // Placeholder, remove this line when implementing the scanner
+        try std.io.getStdOut().writer().print("EOF  null\n", .{});
     }
+
+    try printToken(EOFToken);
 }
