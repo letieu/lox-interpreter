@@ -89,7 +89,7 @@ pub fn main() !void {
             try printToken(token);
         }
     } else {
-        try std.io.getStdOut().writer().print("EOF  null", .{});
+        // try std.io.getStdOut().writer().print("EOF  nulln", .{});
     }
 
     try printToken(EOFToken);
