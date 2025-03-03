@@ -7,6 +7,8 @@ const TokenType = enum {
     STRING, // "string"
     LEFT_PAREN, // (
     RIGHT_PAREN, // )
+    LEFT_BRACE, // {
+    RIGHT_BRACE, // }
     SEMICOLON, // ;
     EOF,
 };
@@ -35,6 +37,18 @@ const RParenToken = Token{
     .literal = null,
 };
 
+const LBraceToken = Token{
+    .tokenType = TokenType.LEFT_BRACE,
+    .lexeme = "{",
+    .literal = null,
+};
+
+const RBraceToken = Token{
+    .tokenType = TokenType.RIGHT_BRACE,
+    .lexeme = "}",
+    .literal = null,
+};
+
 const MyErrors = error{
     TokenNotFound,
 };
@@ -46,6 +60,12 @@ fn match(i: u8) MyErrors!Token {
         },
         ')' => {
             return RParenToken;
+        },
+        '{' => {
+            return LBraceToken;
+        },
+        '}' => {
+            return RBraceToken;
         },
         0 => {
             return EOFToken;
