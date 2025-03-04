@@ -135,7 +135,7 @@ pub fn main() !void {
     const file_contents = try std.fs.cwd().readFileAlloc(std.heap.page_allocator, filename, std.math.maxInt(usize));
     defer std.heap.page_allocator.free(file_contents);
 
-    var exit_code: i32 = 0;
+    var exit_code: u8 = 0;
 
     if (file_contents.len > 0) {
         var line_number: usize = 1;
