@@ -10,6 +10,11 @@ const TokenType = enum {
     LEFT_BRACE, // {
     RIGHT_BRACE, // }
     SEMICOLON, // ;
+    COMMA, // ,
+    DOT, // .
+    MINUS, // -
+    PLUS, // +
+    STAR, // *
     EOF,
 };
 
@@ -49,30 +54,53 @@ const RBraceToken = Token{
     .literal = null,
 };
 
+const CommaToken = Token{
+    .tokenType = TokenType.COMMA,
+    .lexeme = ",",
+    .literal = null,
+};
+
+const DotToken = Token{
+    .tokenType = TokenType.DOT,
+    .lexeme = ".",
+    .literal = null,
+};
+
+const MinusToken = Token{
+    .tokenType = TokenType.MINUS,
+    .lexeme = "-",
+    .literal = null,
+};
+
+const PlusToken = Token{
+    .tokenType = TokenType.PLUS,
+    .lexeme = "+",
+    .literal = null,
+};
+
+const StarToken = Token{
+    .tokenType = TokenType.STAR,
+    .lexeme = "*",
+    .literal = null,
+};
+
 const MyErrors = error{
     TokenNotFound,
 };
 
 fn match(i: u8) MyErrors!Token {
     switch (i) {
-        '(' => {
-            return LParenToken;
-        },
-        ')' => {
-            return RParenToken;
-        },
-        '{' => {
-            return LBraceToken;
-        },
-        '}' => {
-            return RBraceToken;
-        },
-        0 => {
-            return EOFToken;
-        },
-        else => {
-            return MyErrors.TokenNotFound;
-        },
+        '(' => return LParenToken,
+        ')' => return RParenToken,
+        '{' => return LBraceToken,
+        '}' => return RBraceToken,
+        ',' => return CommaToken,
+        '.' => return DotToken,
+        '+' => return PlusToken,
+        '-' => return MinusToken,
+        '*' => return StarToken,
+        0 => return EOFToken,
+        else => return MyErrors.TokenNotFound,
     }
 }
 
