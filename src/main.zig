@@ -120,7 +120,6 @@ fn match(char: u8, index: usize, file_contents: []const u8) !Token {
         '-' => return MinusToken,
         '*' => return StarToken,
         '=' => {
-            // if (file_contents[index + 1] == '=') {
             if (file_contents.len > index + 1 and file_contents[index + 1] == '=') {
                 return EqualEqualToken;
             } else {
@@ -191,5 +190,6 @@ pub fn main() !void {
         index += token.lexeme.len;
     }
 
+    try printToken(EOFToken);
     std.process.exit(exit_code);
 }
