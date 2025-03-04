@@ -19,6 +19,10 @@ const TokenType = enum {
     EQUAL_EQUAL, // ==
     BANG, // !
     BANG_EQUAL, // !=
+    LESS, // <
+    LESS_EQUAL, // <=
+    GREATER, // >
+    GREATER_EQUAL, // >=
 };
 
 const Token = struct {
@@ -117,6 +121,30 @@ const BangEqualToken = Token{
     .literal = null,
 };
 
+const LessToken = Token{
+    .tokenType = TokenType.LESS,
+    .lexeme = "<",
+    .literal = null,
+};
+
+const LessEqualToken = Token{
+    .tokenType = TokenType.LESS_EQUAL,
+    .lexeme = "<=",
+    .literal = null,
+};
+
+const GreaterToken = Token{
+    .tokenType = TokenType.GREATER,
+    .lexeme = ">",
+    .literal = null,
+};
+
+const GreaterEqualToken = Token{
+    .tokenType = TokenType.GREATER_EQUAL,
+    .lexeme = ">=",
+    .literal = null,
+};
+
 const MyErrors = error{
     TokenNotFound,
 };
@@ -144,6 +172,18 @@ fn match(char: u8, index: usize, file_contents: []const u8) !Token {
                 return BangEqualToken;
             }
             return BangToken;
+        },
+        '>' => {
+            if (file_contents.len > index + 1 and file_contents[index + 1] == '=') {
+                return GreaterEqualToken;
+            }
+            return GreaterToken;
+        },
+        '<' => {
+            if (file_contents.len > index + 1 and file_contents[index + 1] == '=') {
+                return LessEqualToken;
+            }
+            return LessToken;
         },
         0 => return EOFToken,
         else => return MyErrors.TokenNotFound,
