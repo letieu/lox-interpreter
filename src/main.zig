@@ -17,6 +17,8 @@ const TokenType = enum {
     STAR, // *
     EOF,
     EQUAL_EQUAL, // ==
+    BANG, // !
+    BANG_EQUAL, // !=
 };
 
 const Token = struct {
@@ -103,6 +105,18 @@ const EqualEqualToken = Token{
     .literal = null,
 };
 
+const BangToken = Token{
+    .tokenType = TokenType.BANG,
+    .lexeme = "!",
+    .literal = null,
+};
+
+const BangEqualToken = Token{
+    .tokenType = TokenType.BANG_EQUAL,
+    .lexeme = "!=",
+    .literal = null,
+};
+
 const MyErrors = error{
     TokenNotFound,
 };
@@ -122,9 +136,14 @@ fn match(char: u8, index: usize, file_contents: []const u8) !Token {
         '=' => {
             if (file_contents.len > index + 1 and file_contents[index + 1] == '=') {
                 return EqualEqualToken;
-            } else {
-                return EquaToken;
             }
+            return EquaToken;
+        },
+        '!' => {
+            if (file_contents.len > index + 1 and file_contents[index + 1] == '=') {
+                return BangEqualToken;
+            }
+            return BangToken;
         },
         0 => return EOFToken,
         else => return MyErrors.TokenNotFound,
