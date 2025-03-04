@@ -84,6 +84,12 @@ const StarToken = Token{
     .literal = null,
 };
 
+const SemiColonToken = Token{
+    .tokenType = TokenType.SEMICOLON,
+    .lexeme = ";",
+    .literal = null,
+};
+
 const MyErrors = error{
     TokenNotFound,
 };
@@ -94,6 +100,7 @@ fn match(i: u8) MyErrors!Token {
         ')' => return RParenToken,
         '{' => return LBraceToken,
         '}' => return RBraceToken,
+        ';' => return SemiColonToken,
         ',' => return CommaToken,
         '.' => return DotToken,
         '+' => return PlusToken,
