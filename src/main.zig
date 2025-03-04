@@ -135,6 +135,8 @@ pub fn main() !void {
     const file_contents = try std.fs.cwd().readFileAlloc(std.heap.page_allocator, filename, std.math.maxInt(usize));
     defer std.heap.page_allocator.free(file_contents);
 
+    var exit_code: i32 = 0;
+
     if (file_contents.len > 0) {
         var line_number: usize = 1;
         for (file_contents) |i| {
@@ -145,6 +147,7 @@ pub fn main() !void {
 
             const token = match(i) catch {
                 std.debug.print("[line {d}] Error: Unexpected character: {c}\n", .{ line_number, i });
+                exit_code = 65;
                 continue;
             };
 
@@ -155,4 +158,6 @@ pub fn main() !void {
     }
 
     try printToken(EOFToken);
+
+    std.process.exit(exit_code);
 }
