@@ -136,11 +136,18 @@ pub fn main() !void {
     defer std.heap.page_allocator.free(file_contents);
 
     if (file_contents.len > 0) {
+        var line_number: usize = 1;
         for (file_contents) |i| {
             if (i == '\n') {
+                line_number += 1;
                 continue;
             }
-            const token = try match(i);
+
+            const token = match(i) catch {
+                std.debug.print("[line {d}] Error: Unexpected character: {c}\n", .{ line_number, i });
+                continue;
+            };
+
             try printToken(token);
         }
     } else {
