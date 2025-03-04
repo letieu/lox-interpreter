@@ -16,6 +16,7 @@ const TokenType = enum {
     PLUS, // +
     STAR, // *
     EOF,
+    EQUAL_EQUAL, // ==
 };
 
 const Token = struct {
@@ -90,12 +91,24 @@ const SemiColonToken = Token{
     .literal = null,
 };
 
+const EquaToken = Token{
+    .tokenType = TokenType.EQUAL,
+    .lexeme = "=",
+    .literal = null,
+};
+
+const EqualEqualToken = Token{
+    .tokenType = TokenType.EQUAL_EQUAL,
+    .lexeme = "==",
+    .literal = null,
+};
+
 const MyErrors = error{
     TokenNotFound,
 };
 
-fn match(i: u8) MyErrors!Token {
-    switch (i) {
+fn match(char: u8, index: usize, file_contents: []const u8) !Token {
+    switch (char) {
         '(' => return LParenToken,
         ')' => return RParenToken,
         '{' => return LBraceToken,
@@ -106,6 +119,13 @@ fn match(i: u8) MyErrors!Token {
         '+' => return PlusToken,
         '-' => return MinusToken,
         '*' => return StarToken,
+        '=' => {
+            if (file_contents[index + 1] == '=') {
+                return EqualEqualToken;
+            } else {
+                return EquaToken;
+            }
+        },
         0 => return EOFToken,
         else => return MyErrors.TokenNotFound,
     }
@@ -137,27 +157,38 @@ pub fn main() !void {
 
     var exit_code: u8 = 0;
 
-    if (file_contents.len > 0) {
-        var line_number: usize = 1;
-        for (file_contents) |i| {
-            if (i == '\n') {
-                line_number += 1;
-                continue;
-            }
-
-            const token = match(i) catch {
-                std.debug.print("[line {d}] Error: Unexpected character: {c}\n", .{ line_number, i });
-                exit_code = 65;
-                continue;
-            };
-
-            try printToken(token);
-        }
-    } else {
-        // try std.io.getStdOut().writer().print("EOF  nulln", .{});
+    if (file_contents.len == 0) {
+        try printToken(EOFToken);
+        std.process.exit(exit_code);
     }
 
-    try printToken(EOFToken);
+    var line_number: usize = 1;
+    var index: usize = 0;
+
+    while (index < file_contents.len) {
+        const char = file_contents[index];
+
+        if (char == '\n') {
+            line_number += 1;
+            index += 1;
+            continue;
+        }
+
+        const token = match(char, index, file_contents) catch {
+            std.debug.print("[line {d}] Error: Unexpected character: {c}\n", .{ line_number, char });
+            exit_code = 65;
+            index += 1;
+            continue;
+        };
+
+        try printToken(token);
+
+        if (token.tokenType == TokenType.EOF) {
+            break;
+        }
+
+        index += token.lexeme.len;
+    }
 
     std.process.exit(exit_code);
 }
