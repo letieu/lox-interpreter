@@ -1,5 +1,17 @@
 const std = @import("std");
 
+fn isInt(num: []const u8) bool {
+    var buf: [256]u8 = undefined;
+    const float = std.fmt.parseFloat(f32, num) catch {
+        return false;
+    };
+    const str = std.fmt.bufPrint(&buf, "{d}", .{float}) catch {
+        return false;
+    };
+
+    return std.mem.indexOfScalar(u8, str, '.') == null;
+}
+
 const TokenType = enum {
     VAR, // var
     IDENTIFIER, // variable names
@@ -36,11 +48,14 @@ const Token = struct {
         if (self.tokenType == TokenType.STRING) {
             try std.io.getStdOut().writer().print("{s} \"{s}\" {?s}\n", .{ @tagName(self.tokenType), self.lexeme, self.literal });
         } else if (self.tokenType == TokenType.NUMBER) {
-            const number = try std.fmt.parseFloat(f32, self.lexeme);
-            if (std.mem.indexOfScalar(u8, self.lexeme, '.') == null) {
-                try std.io.getStdOut().writer().print("{s} {s} {d:.1}\n", .{ @tagName(self.tokenType), self.lexeme, number });
+            const num = std.fmt.parseFloat(f32, self.lexeme) catch {
+                std.debug.print("Error: Could not parse number.\n", .{});
+                return;
+            };
+            if (isInt(self.lexeme)) {
+                try std.io.getStdOut().writer().print("{s} {s} {?d:.1}\n", .{ @tagName(self.tokenType), self.lexeme, num });
             } else {
-                try std.io.getStdOut().writer().print("{s} {s} {d}\n", .{ @tagName(self.tokenType), self.lexeme, number });
+                try std.io.getStdOut().writer().print("{s} {s} {?d}\n", .{ @tagName(self.tokenType), self.lexeme, num });
             }
         } else {
             try std.io.getStdOut().writer().print("{s} {s} {any}\n", .{ @tagName(self.tokenType), self.lexeme, self.literal });
