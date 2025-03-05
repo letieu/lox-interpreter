@@ -142,7 +142,7 @@ const Scanner = struct {
             '/' => {
                 const next_char = self.peek();
                 if (next_char == '/') {
-                    while (self.peek() != '\n' and !self.isEnd()) {
+                    while (!self.isEnd() and self.peek() != '\n') {
                         self.advance();
                     }
 
