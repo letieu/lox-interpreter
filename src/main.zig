@@ -122,6 +122,7 @@ const Scanner = struct {
                     self.advance();
                 } else {
                     std.debug.print("[line {d}] Error: Unterminated string\n", .{self.line});
+                    self.have_error = true;
                 }
             },
             '=' => {
