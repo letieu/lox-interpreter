@@ -5,6 +5,7 @@ const TokenType = enum {
     IDENTIFIER, // variable names
     EQUAL, // =
     STRING, // "string"
+    NUMBER, // 123
     LEFT_PAREN, // (
     RIGHT_PAREN, // )
     LEFT_BRACE, // {
@@ -34,6 +35,9 @@ const Token = struct {
     fn print(self: Token) !void {
         if (self.tokenType == TokenType.STRING) {
             try std.io.getStdOut().writer().print("{s} \"{s}\" {?s}\n", .{ @tagName(self.tokenType), self.lexeme, self.literal });
+        } else if (self.tokenType == TokenType.NUMBER) {
+            const number = try std.fmt.parseFloat(f32, self.lexeme);
+            try std.io.getStdOut().writer().print("{s} {s} {d}\n", .{ @tagName(self.tokenType), self.lexeme, number });
         } else {
             try std.io.getStdOut().writer().print("{s} {s} {any}\n", .{ @tagName(self.tokenType), self.lexeme, self.literal });
         }
@@ -124,6 +128,13 @@ const Scanner = struct {
                     std.debug.print("[line {d}] Error: Unterminated string.\n", .{self.line});
                     self.have_error = true;
                 }
+            },
+            '0'...'9' => {
+                while (std.ascii.isDigit(self.peek()) or self.peek() == '.') {
+                    self.advance();
+                }
+
+                self.addToken(TokenType.NUMBER, true);
             },
             '=' => {
                 const next_char = self.peek();
