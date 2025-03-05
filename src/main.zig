@@ -171,6 +171,14 @@ const Scanner = struct {
             self.match();
             self.advance();
         }
+
+        if (!self.have_error) {
+            self.tokens.append(Token{
+                .tokenType = TokenType.EOF,
+                .lexeme = "EOF",
+                .literal = null,
+            }) catch unreachable;
+        }
     }
 };
 
