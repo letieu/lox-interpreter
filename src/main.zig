@@ -112,7 +112,7 @@ const Scanner = struct {
             '-' => self.addToken(TokenType.MINUS, false),
             '*' => self.addToken(TokenType.STAR, false),
             '"' => {
-                while (self.peek() != '"' and self.peek() != '\n') {
+                while (self.peek() != '"' and self.peek() != '\n' and !self.isEnd()) {
                     self.advance();
                 }
 
