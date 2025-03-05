@@ -197,10 +197,6 @@ pub fn main() !void {
     const file_contents = try std.fs.cwd().readFileAlloc(std.heap.page_allocator, filename, std.math.maxInt(usize));
     defer std.heap.page_allocator.free(file_contents);
 
-    if (file_contents.len == 0) {
-        std.process.exit(0);
-    }
-
     var scanner = Scanner.init(file_contents, std.heap.page_allocator);
     scanner.scan();
 
