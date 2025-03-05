@@ -169,13 +169,11 @@ const Scanner = struct {
             self.reset_start();
         }
 
-        if (!self.have_error) {
-            self.tokens.append(Token{
-                .tokenType = TokenType.EOF,
-                .lexeme = "",
-                .literal = null,
-            }) catch unreachable;
-        }
+        self.tokens.append(Token{
+            .tokenType = TokenType.EOF,
+            .lexeme = "",
+            .literal = null,
+        }) catch unreachable;
     }
 };
 
