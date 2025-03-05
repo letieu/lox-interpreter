@@ -121,7 +121,7 @@ const Scanner = struct {
                     self.addToken(TokenType.STRING, true);
                     self.advance();
                 } else {
-                    std.debug.print("[line {d}] Error: Unterminated string\n", .{self.line});
+                    std.debug.print("[line {d}] Error: Unterminated string.\n", .{self.line});
                     self.have_error = true;
                 }
             },
