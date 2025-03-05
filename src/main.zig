@@ -47,7 +47,10 @@ const Token = struct {
     fn print(self: Token) !void {
         if (self.tokenType == TokenType.STRING) {
             try std.io.getStdOut().writer().print("{s} \"{s}\" {?s}\n", .{ @tagName(self.tokenType), self.lexeme, self.literal });
-        } else if (self.tokenType == TokenType.NUMBER) {
+            return;
+        }
+
+        if (self.tokenType == TokenType.NUMBER) {
             const num = std.fmt.parseFloat(f32, self.lexeme) catch {
                 std.debug.print("Error: Could not parse number.\n", .{});
                 return;
@@ -57,9 +60,10 @@ const Token = struct {
             } else {
                 try std.io.getStdOut().writer().print("{s} {s} {?d}\n", .{ @tagName(self.tokenType), self.lexeme, num });
             }
-        } else {
-            try std.io.getStdOut().writer().print("{s} {s} {any}\n", .{ @tagName(self.tokenType), self.lexeme, self.literal });
+            return;
         }
+
+        try std.io.getStdOut().writer().print("{s} {s} {any}\n", .{ @tagName(self.tokenType), self.lexeme, self.literal });
     }
 };
 
