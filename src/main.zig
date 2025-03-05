@@ -198,7 +198,7 @@ pub fn main() !void {
     defer std.heap.page_allocator.free(file_contents);
 
     if (file_contents.len == 0) {
-        std.process.exit(1);
+        std.process.exit(0);
     }
 
     var scanner = Scanner.init(file_contents, std.heap.page_allocator);
