@@ -191,7 +191,7 @@ pub fn main() !void {
 
     if (!std.mem.eql(u8, command, "tokenize")) {
         std.debug.print("Unknown command: {s}\n", .{command});
-        std.process.exit(1);
+        std.process.exit(0);
     }
 
     const file_contents = try std.fs.cwd().readFileAlloc(std.heap.page_allocator, filename, std.math.maxInt(usize));
