@@ -14,6 +14,7 @@ const TokenType = enum {
     DOT, // .
     MINUS, // -
     PLUS, // +
+    SLASH, // /
     STAR, // *
     EOF,
     EQUAL_EQUAL, // ==
@@ -29,170 +30,146 @@ const Token = struct {
     tokenType: TokenType, // VAR
     lexeme: []const u8, // 123
     literal: ?[]u8, // 123
-};
 
-const EOFToken = Token{
-    .tokenType = TokenType.EOF,
-    .lexeme = "",
-    .literal = null,
-};
-
-const LParenToken = Token{
-    .tokenType = TokenType.LEFT_PAREN,
-    .lexeme = "(",
-    .literal = null,
-};
-
-const RParenToken = Token{
-    .tokenType = TokenType.RIGHT_PAREN,
-    .lexeme = ")",
-    .literal = null,
-};
-
-const LBraceToken = Token{
-    .tokenType = TokenType.LEFT_BRACE,
-    .lexeme = "{",
-    .literal = null,
-};
-
-const RBraceToken = Token{
-    .tokenType = TokenType.RIGHT_BRACE,
-    .lexeme = "}",
-    .literal = null,
-};
-
-const CommaToken = Token{
-    .tokenType = TokenType.COMMA,
-    .lexeme = ",",
-    .literal = null,
-};
-
-const DotToken = Token{
-    .tokenType = TokenType.DOT,
-    .lexeme = ".",
-    .literal = null,
-};
-
-const MinusToken = Token{
-    .tokenType = TokenType.MINUS,
-    .lexeme = "-",
-    .literal = null,
-};
-
-const PlusToken = Token{
-    .tokenType = TokenType.PLUS,
-    .lexeme = "+",
-    .literal = null,
-};
-
-const StarToken = Token{
-    .tokenType = TokenType.STAR,
-    .lexeme = "*",
-    .literal = null,
-};
-
-const SemiColonToken = Token{
-    .tokenType = TokenType.SEMICOLON,
-    .lexeme = ";",
-    .literal = null,
-};
-
-const EquaToken = Token{
-    .tokenType = TokenType.EQUAL,
-    .lexeme = "=",
-    .literal = null,
-};
-
-const EqualEqualToken = Token{
-    .tokenType = TokenType.EQUAL_EQUAL,
-    .lexeme = "==",
-    .literal = null,
-};
-
-const BangToken = Token{
-    .tokenType = TokenType.BANG,
-    .lexeme = "!",
-    .literal = null,
-};
-
-const BangEqualToken = Token{
-    .tokenType = TokenType.BANG_EQUAL,
-    .lexeme = "!=",
-    .literal = null,
-};
-
-const LessToken = Token{
-    .tokenType = TokenType.LESS,
-    .lexeme = "<",
-    .literal = null,
-};
-
-const LessEqualToken = Token{
-    .tokenType = TokenType.LESS_EQUAL,
-    .lexeme = "<=",
-    .literal = null,
-};
-
-const GreaterToken = Token{
-    .tokenType = TokenType.GREATER,
-    .lexeme = ">",
-    .literal = null,
-};
-
-const GreaterEqualToken = Token{
-    .tokenType = TokenType.GREATER_EQUAL,
-    .lexeme = ">=",
-    .literal = null,
-};
-
-const MyErrors = error{
-    TokenNotFound,
-};
-
-fn match(char: u8, index: usize, file_contents: []const u8) !Token {
-    switch (char) {
-        '(' => return LParenToken,
-        ')' => return RParenToken,
-        '{' => return LBraceToken,
-        '}' => return RBraceToken,
-        ';' => return SemiColonToken,
-        ',' => return CommaToken,
-        '.' => return DotToken,
-        '+' => return PlusToken,
-        '-' => return MinusToken,
-        '*' => return StarToken,
-        '=' => {
-            if (file_contents.len > index + 1 and file_contents[index + 1] == '=') {
-                return EqualEqualToken;
-            }
-            return EquaToken;
-        },
-        '!' => {
-            if (file_contents.len > index + 1 and file_contents[index + 1] == '=') {
-                return BangEqualToken;
-            }
-            return BangToken;
-        },
-        '>' => {
-            if (file_contents.len > index + 1 and file_contents[index + 1] == '=') {
-                return GreaterEqualToken;
-            }
-            return GreaterToken;
-        },
-        '<' => {
-            if (file_contents.len > index + 1 and file_contents[index + 1] == '=') {
-                return LessEqualToken;
-            }
-            return LessToken;
-        },
-        0 => return EOFToken,
-        else => return MyErrors.TokenNotFound,
+    fn print(self: Token) !void {
+        try std.io.getStdOut().writer().print("{s} {s} {any}\n", .{ @tagName(self.tokenType), self.lexeme, self.literal });
     }
-}
+};
 
-fn printToken(token: Token) !void {
-    try std.io.getStdOut().writer().print("{s} {s} {any}\n", .{ @tagName(token.tokenType), token.lexeme, token.literal });
-}
+const Scanner = struct {
+    source: []u8,
+    tokens: std.ArrayList(Token),
+
+    current_start: u32,
+    current_end: u32,
+    line: u32,
+
+    have_error: bool,
+
+    fn init(source: []u8, allocator: std.mem.Allocator) Scanner {
+        return .{
+            .source = source,
+            .tokens = std.ArrayList(Token).init(allocator),
+            .current_start = 0,
+            .current_end = 0,
+            .line = 0,
+            .have_error = false,
+        };
+    }
+
+    fn advance(self: *Scanner) void {
+        self.current_end += 1;
+    }
+
+    fn reset_start(self: *Scanner) void {
+        self.current_start = self.current_end + 1;
+    }
+
+    fn addToken(self: *Scanner, tokenType: TokenType) void {
+        const str = self.source[self.current_start .. self.current_end + 1];
+        const token = Token{
+            .tokenType = tokenType,
+            .lexeme = str,
+            .literal = null, // 123
+        };
+
+        self.tokens.append(token) catch unreachable;
+        self.reset_start();
+    }
+
+    fn peek(self: Scanner) u8 {
+        if (self.isEnd()) {
+            return 0;
+        }
+
+        return self.source[self.current_end + 1];
+    }
+
+    fn match(self: *Scanner) void {
+        const char = self.source[self.current_end];
+
+        switch (char) {
+            '\n' => {
+                self.reset_start();
+                self.line += 1;
+            },
+            '(' => self.addToken(TokenType.LEFT_PAREN),
+            ')' => self.addToken(TokenType.RIGHT_PAREN),
+            '{' => self.addToken(TokenType.LEFT_BRACE),
+            '}' => self.addToken(TokenType.RIGHT_BRACE),
+            ';' => self.addToken(TokenType.SEMICOLON),
+            ',' => self.addToken(TokenType.COMMA),
+            '.' => self.addToken(TokenType.DOT),
+            '+' => self.addToken(TokenType.PLUS),
+            '-' => self.addToken(TokenType.MINUS),
+            '*' => self.addToken(TokenType.STAR),
+            '=' => {
+                const next_char = self.peek();
+                if (next_char == '=') {
+                    self.advance();
+                    self.addToken(TokenType.EQUAL_EQUAL);
+                } else {
+                    self.addToken(TokenType.EQUAL);
+                }
+            },
+            '!' => {
+                const next_char = self.peek();
+                if (next_char == '=') {
+                    self.advance();
+                    self.addToken(TokenType.BANG_EQUAL);
+                } else {
+                    self.addToken(TokenType.BANG);
+                }
+            },
+            '>' => {
+                const next_char = self.peek();
+                if (next_char == '=') {
+                    self.advance();
+                    self.addToken(TokenType.GREATER_EQUAL);
+                } else {
+                    self.addToken(TokenType.GREATER);
+                }
+            },
+            '<' => {
+                const next_char = self.peek();
+                if (next_char == '=') {
+                    self.advance();
+                    self.addToken(TokenType.LESS_EQUAL);
+                } else {
+                    self.addToken(TokenType.LESS);
+                }
+            },
+            '/' => {
+                const next_char = self.peek();
+                if (next_char == '/') {
+                    while (self.peek() != '\n' and !self.isEnd()) {
+                        self.advance();
+                    }
+
+                    self.reset_start();
+                } else {
+                    self.addToken(TokenType.SLASH);
+                }
+            },
+            0 => self.addToken(TokenType.EOF),
+            else => {
+                std.debug.print("[line {d}] Error: Unexpected character: {c}\n", .{ self.line, char });
+                self.have_error = true;
+            },
+        }
+    }
+
+    fn isEnd(self: Scanner) bool {
+        return self.current_end >= self.source.len;
+    }
+
+    fn scan(self: *Scanner) void {
+        while (!self.isEnd()) {
+            self.match();
+            self.advance();
+        }
+    }
+};
 
 pub fn main() !void {
     const args = try std.process.argsAlloc(std.heap.page_allocator);
@@ -214,41 +191,14 @@ pub fn main() !void {
     const file_contents = try std.fs.cwd().readFileAlloc(std.heap.page_allocator, filename, std.math.maxInt(usize));
     defer std.heap.page_allocator.free(file_contents);
 
-    var exit_code: u8 = 0;
-
     if (file_contents.len == 0) {
-        try printToken(EOFToken);
-        std.process.exit(exit_code);
+        std.process.exit(1);
     }
 
-    var line_number: usize = 1;
-    var index: usize = 0;
+    var scanner = Scanner.init(file_contents, std.heap.page_allocator);
+    scanner.scan();
 
-    while (index < file_contents.len) {
-        const char = file_contents[index];
-
-        if (char == '\n') {
-            line_number += 1;
-            index += 1;
-            continue;
-        }
-
-        const token = match(char, index, file_contents) catch {
-            std.debug.print("[line {d}] Error: Unexpected character: {c}\n", .{ line_number, char });
-            exit_code = 65;
-            index += 1;
-            continue;
-        };
-
-        try printToken(token);
-
-        if (token.tokenType == TokenType.EOF) {
-            break;
-        }
-
-        index += token.lexeme.len;
+    for (scanner.tokens.items) |token| {
+        try token.print();
     }
-
-    try printToken(EOFToken);
-    std.process.exit(exit_code);
 }
