@@ -81,6 +81,9 @@ const Scanner = struct {
         if (self.isEnd()) {
             return 0;
         }
+        if (self.current_end + 1 >= self.source.len) {
+            return 0;
+        }
 
         return self.source[self.current_end + 1];
     }
