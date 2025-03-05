@@ -52,7 +52,7 @@ const Scanner = struct {
             .tokens = std.ArrayList(Token).init(allocator),
             .current_start = 0,
             .current_end = 0,
-            .line = 0,
+            .line = 1,
             .have_error = false,
         };
     }
@@ -62,7 +62,7 @@ const Scanner = struct {
     }
 
     fn reset_start(self: *Scanner) void {
-        self.current_start = self.current_end + 1;
+        self.current_start = self.current_end;
     }
 
     fn addToken(self: *Scanner, tokenType: TokenType) void {
@@ -74,7 +74,6 @@ const Scanner = struct {
         };
 
         self.tokens.append(token) catch unreachable;
-        self.reset_start();
     }
 
     fn peek(self: Scanner) u8 {
@@ -93,7 +92,6 @@ const Scanner = struct {
 
         switch (char) {
             '\n' => {
-                self.reset_start();
                 self.line += 1;
             },
             '(' => self.addToken(TokenType.LEFT_PAREN),
@@ -148,8 +146,6 @@ const Scanner = struct {
                     while (!self.isEnd() and self.peek() != '\n') {
                         self.advance();
                     }
-
-                    self.reset_start();
                 } else {
                     self.addToken(TokenType.SLASH);
                 }
@@ -170,6 +166,7 @@ const Scanner = struct {
         while (!self.isEnd()) {
             self.match();
             self.advance();
+            self.reset_start();
         }
 
         if (!self.have_error) {
@@ -211,5 +208,9 @@ pub fn main() !void {
 
     for (scanner.tokens.items) |token| {
         try token.print();
+    }
+
+    if (scanner.have_error) {
+        std.process.exit(65);
     }
 }
