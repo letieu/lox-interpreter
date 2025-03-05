@@ -175,7 +175,7 @@ const Scanner = struct {
         if (!self.have_error) {
             self.tokens.append(Token{
                 .tokenType = TokenType.EOF,
-                .lexeme = "EOF",
+                .lexeme = "",
                 .literal = null,
             }) catch unreachable;
         }
