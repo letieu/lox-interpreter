@@ -32,7 +32,11 @@ const Token = struct {
     literal: ?[]u8, // 123
 
     fn print(self: Token) !void {
-        try std.io.getStdOut().writer().print("{s} {s} {any}\n", .{ @tagName(self.tokenType), self.lexeme, self.literal });
+        if (self.tokenType == TokenType.STRING) {
+            try std.io.getStdOut().writer().print("{s} \"{s}\" {?s}\n", .{ @tagName(self.tokenType), self.lexeme, self.literal });
+        } else {
+            try std.io.getStdOut().writer().print("{s} {s} {any}\n", .{ @tagName(self.tokenType), self.lexeme, self.literal });
+        }
     }
 };
 
@@ -65,12 +69,12 @@ const Scanner = struct {
         self.current_start = self.current_end;
     }
 
-    fn addToken(self: *Scanner, tokenType: TokenType) void {
+    fn addToken(self: *Scanner, tokenType: TokenType, is_literal: bool) void {
         const str = self.source[self.current_start .. self.current_end + 1];
         const token = Token{
             .tokenType = tokenType,
             .lexeme = str,
-            .literal = null, // 123
+            .literal = if (is_literal) str else null,
         };
 
         self.tokens.append(token) catch unreachable;
@@ -97,50 +101,63 @@ const Scanner = struct {
             },
             ' ' => {},
             '\t' => {},
-            '(' => self.addToken(TokenType.LEFT_PAREN),
-            ')' => self.addToken(TokenType.RIGHT_PAREN),
-            '{' => self.addToken(TokenType.LEFT_BRACE),
-            '}' => self.addToken(TokenType.RIGHT_BRACE),
-            ';' => self.addToken(TokenType.SEMICOLON),
-            ',' => self.addToken(TokenType.COMMA),
-            '.' => self.addToken(TokenType.DOT),
-            '+' => self.addToken(TokenType.PLUS),
-            '-' => self.addToken(TokenType.MINUS),
-            '*' => self.addToken(TokenType.STAR),
+            '(' => self.addToken(TokenType.LEFT_PAREN, false),
+            ')' => self.addToken(TokenType.RIGHT_PAREN, false),
+            '{' => self.addToken(TokenType.LEFT_BRACE, false),
+            '}' => self.addToken(TokenType.RIGHT_BRACE, false),
+            ';' => self.addToken(TokenType.SEMICOLON, false),
+            ',' => self.addToken(TokenType.COMMA, false),
+            '.' => self.addToken(TokenType.DOT, false),
+            '+' => self.addToken(TokenType.PLUS, false),
+            '-' => self.addToken(TokenType.MINUS, false),
+            '*' => self.addToken(TokenType.STAR, false),
+            '"' => {
+                while (self.peek() != '"' and self.peek() != '\n') {
+                    self.advance();
+                }
+
+                if (self.peek() == '"') {
+                    self.current_start += 1;
+                    self.addToken(TokenType.STRING, true);
+                    self.advance();
+                } else {
+                    std.debug.print("[line {d}] Error: Unterminated string\n", .{self.line});
+                }
+            },
             '=' => {
                 const next_char = self.peek();
                 if (next_char == '=') {
                     self.advance();
-                    self.addToken(TokenType.EQUAL_EQUAL);
+                    self.addToken(TokenType.EQUAL_EQUAL, false);
                 } else {
-                    self.addToken(TokenType.EQUAL);
+                    self.addToken(TokenType.EQUAL, false);
                 }
             },
             '!' => {
                 const next_char = self.peek();
                 if (next_char == '=') {
                     self.advance();
-                    self.addToken(TokenType.BANG_EQUAL);
+                    self.addToken(TokenType.BANG_EQUAL, false);
                 } else {
-                    self.addToken(TokenType.BANG);
+                    self.addToken(TokenType.BANG, false);
                 }
             },
             '>' => {
                 const next_char = self.peek();
                 if (next_char == '=') {
                     self.advance();
-                    self.addToken(TokenType.GREATER_EQUAL);
+                    self.addToken(TokenType.GREATER_EQUAL, false);
                 } else {
-                    self.addToken(TokenType.GREATER);
+                    self.addToken(TokenType.GREATER, false);
                 }
             },
             '<' => {
                 const next_char = self.peek();
                 if (next_char == '=') {
                     self.advance();
-                    self.addToken(TokenType.LESS_EQUAL);
+                    self.addToken(TokenType.LESS_EQUAL, false);
                 } else {
-                    self.addToken(TokenType.LESS);
+                    self.addToken(TokenType.LESS, false);
                 }
             },
             '/' => {
@@ -150,10 +167,10 @@ const Scanner = struct {
                         self.advance();
                     }
                 } else {
-                    self.addToken(TokenType.SLASH);
+                    self.addToken(TokenType.SLASH, false);
                 }
             },
-            0 => self.addToken(TokenType.EOF),
+            0 => self.addToken(TokenType.EOF, false),
             else => {
                 std.debug.print("[line {d}] Error: Unexpected character: {c}\n", .{ self.line, char });
                 self.have_error = true;
