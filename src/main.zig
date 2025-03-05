@@ -91,6 +91,8 @@ const Scanner = struct {
             '\n' => {
                 self.line += 1;
             },
+            ' ' => {},
+            '\t' => {},
             '(' => self.addToken(TokenType.LEFT_PAREN),
             ')' => self.addToken(TokenType.RIGHT_PAREN),
             '{' => self.addToken(TokenType.LEFT_BRACE),
