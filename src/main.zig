@@ -208,7 +208,7 @@ const Scanner = struct {
                 }
             },
             'a'...'z', 'A'...'Z', '_' => {
-                while (std.ascii.isAlphanumeric(self.peek())) {
+                while (std.ascii.isAlphanumeric(self.peek()) or self.peek() == '_') {
                     self.advance();
                 }
 
