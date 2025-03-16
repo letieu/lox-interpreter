@@ -1,15 +1,9 @@
 const std = @import("std");
 
-fn isInt(num: []const u8) bool {
-    var buf: [256]u8 = undefined;
-    const float = std.fmt.parseFloat(f32, num) catch {
-        return false;
-    };
-    const str = std.fmt.bufPrint(&buf, "{d}", .{float}) catch {
-        return false;
-    };
-
-    return std.mem.indexOfScalar(u8, str, '.') == null;
+fn isInt(number: f64) bool {
+    const intVal: usize = @intFromFloat(number);
+    const casted: f64 = @floatFromInt(intVal);
+    return number == casted;
 }
 
 const TokenType = enum {
@@ -58,7 +52,12 @@ const Token = struct {
         }
 
         if (self.tokenType == TokenType.NUMBER) {
-            try writer.print("{s} {s} {?d}\n", .{ @tagName(self.tokenType), self.lexeme, self.literal.?.number });
+            const number = self.literal.?.number;
+            if (isInt(number)) {
+                try writer.print("in {s} {s} {?d:.1}\n", .{ @tagName(self.tokenType), self.lexeme, number });
+            } else {
+                try writer.print("fl {s} {s} {?d}\n", .{ @tagName(self.tokenType), self.lexeme, number });
+            }
             return;
         }
 
