@@ -7,7 +7,6 @@ fn isInt(number: f64) bool {
 }
 
 const TokenType = enum {
-    VAR, // var
     IDENTIFIER, // variable names
     EQUAL, // =
     STRING, // "string"
@@ -31,7 +30,49 @@ const TokenType = enum {
     LESS_EQUAL, // <=
     GREATER, // >
     GREATER_EQUAL, // >=
+
+    // Keywords
+    AND, // and
+    VAR, // var
+    WHILE, // while
+    TRUE, // true
+    THIS, // this
+    SUPER, // super
+    RETURN, // return
+    PRINT, // print
+    OR, // or
+    NIL, // nil
+    IF, // if
+    FUN, // fun
+    FOR, // for
+    FALSE, // false
+    ELSE, // else
+    CLASS, // class
 };
+
+// const NameMap = std.StaticStringMap(Foo).initComptime(.{
+//         .{ "c89", .b },
+//         .{ "c89", .a },
+//     });
+
+const keywordMap = std.StaticStringMap(TokenType).initComptime(.{
+    .{ "and", TokenType.AND },
+    .{ "var", TokenType.VAR },
+    .{ "while", TokenType.WHILE },
+    .{ "true", TokenType.TRUE },
+    .{ "this", TokenType.THIS },
+    .{ "super", TokenType.SUPER },
+    .{ "return", TokenType.RETURN },
+    .{ "print", TokenType.PRINT },
+    .{ "or", TokenType.OR },
+    .{ "nil", TokenType.NIL },
+    .{ "if", TokenType.IF },
+    .{ "fun", TokenType.FUN },
+    .{ "for", TokenType.FOR },
+    .{ "false", TokenType.FALSE },
+    .{ "else", TokenType.ELSE },
+    .{ "class", TokenType.CLASS },
+});
 
 const Literal = union {
     string: []const u8,
@@ -94,8 +135,12 @@ const Scanner = struct {
         self.current_start = self.current_end;
     }
 
+    fn currentStr(self: Scanner) []const u8 {
+        return self.source[self.current_start .. self.current_end + 1];
+    }
+
     fn addToken(self: *Scanner, tokenType: TokenType) void {
-        const str = self.source[self.current_start .. self.current_end + 1];
+        const str = self.currentStr();
         const token = Token{
             .tokenType = tokenType,
             .lexeme = str,
@@ -217,6 +262,13 @@ const Scanner = struct {
             'a'...'z', 'A'...'Z', '_' => {
                 while (std.ascii.isAlphanumeric(self.peek()) or self.peek() == '_') {
                     self.advance();
+                }
+
+                const str = self.currentStr();
+                const keyword = keywordMap.get(str);
+                if (keyword != null) {
+                    self.addToken(keyword.?);
+                    return;
                 }
 
                 self.addToken(TokenType.IDENTIFIER);
