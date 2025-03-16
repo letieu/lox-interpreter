@@ -65,11 +65,6 @@ const Token = struct {
             return;
         }
 
-        if (self.tokenType == TokenType.IDENTIFIER) {
-            try writer.print("{s} {s} {?s}\n", .{ @tagName(self.tokenType), self.lexeme, self.literal });
-            return;
-        }
-
         try writer.print("{s} {s} {any}\n", .{ @tagName(self.tokenType), self.lexeme, self.literal });
     }
 };
@@ -217,7 +212,7 @@ const Scanner = struct {
                     self.advance();
                 }
 
-                self.addToken(TokenType.IDENTIFIER, true);
+                self.addToken(TokenType.IDENTIFIER, false);
             },
             0 => self.addToken(TokenType.EOF, false),
             else => {
