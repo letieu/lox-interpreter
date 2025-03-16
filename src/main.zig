@@ -54,9 +54,9 @@ const Token = struct {
         if (self.tokenType == TokenType.NUMBER) {
             const number = self.literal.?.number;
             if (isInt(number)) {
-                try writer.print("in {s} {s} {?d:.1}\n", .{ @tagName(self.tokenType), self.lexeme, number });
+                try writer.print("{s} {s} {?d:.1}\n", .{ @tagName(self.tokenType), self.lexeme, number });
             } else {
-                try writer.print("fl {s} {s} {?d}\n", .{ @tagName(self.tokenType), self.lexeme, number });
+                try writer.print("{s} {s} {?d}\n", .{ @tagName(self.tokenType), self.lexeme, number });
             }
             return;
         }
