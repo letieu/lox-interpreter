@@ -45,8 +45,10 @@ const Token = struct {
     literal: ?[]u8, // 123
 
     fn print(self: Token) !void {
+        const writer = std.io.getStdOut().writer();
+
         if (self.tokenType == TokenType.STRING) {
-            try std.io.getStdOut().writer().print("{s} \"{s}\" {?s}\n", .{ @tagName(self.tokenType), self.lexeme, self.literal });
+            try writer.print("{s} \"{s}\" {?s}\n", .{ @tagName(self.tokenType), self.lexeme, self.literal });
             return;
         }
 
@@ -56,14 +58,19 @@ const Token = struct {
                 return;
             };
             if (isInt(self.lexeme)) {
-                try std.io.getStdOut().writer().print("{s} {s} {?d:.1}\n", .{ @tagName(self.tokenType), self.lexeme, num });
+                try writer.print("{s} {s} {?d:.1}\n", .{ @tagName(self.tokenType), self.lexeme, num });
             } else {
-                try std.io.getStdOut().writer().print("{s} {s} {?d}\n", .{ @tagName(self.tokenType), self.lexeme, num });
+                try writer.print("{s} {s} {?d}\n", .{ @tagName(self.tokenType), self.lexeme, num });
             }
             return;
         }
 
-        try std.io.getStdOut().writer().print("{s} {s} {any}\n", .{ @tagName(self.tokenType), self.lexeme, self.literal });
+        if (self.tokenType == TokenType.IDENTIFIER) {
+            try writer.print("{s} {s} {?s}\n", .{ @tagName(self.tokenType), self.lexeme, self.literal });
+            return;
+        }
+
+        try writer.print("{s} {s} {any}\n", .{ @tagName(self.tokenType), self.lexeme, self.literal });
     }
 };
 
@@ -204,6 +211,13 @@ const Scanner = struct {
                 } else {
                     self.addToken(TokenType.SLASH, false);
                 }
+            },
+            'a'...'z', 'A'...'Z', '_' => {
+                while (std.ascii.isAlphanumeric(self.peek())) {
+                    self.advance();
+                }
+
+                self.addToken(TokenType.IDENTIFIER, true);
             },
             0 => self.addToken(TokenType.EOF, false),
             else => {
