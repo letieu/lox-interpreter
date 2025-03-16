@@ -39,29 +39,26 @@ const TokenType = enum {
     GREATER_EQUAL, // >=
 };
 
+const Literal = union {
+    string: []const u8,
+    number: f64,
+};
+
 const Token = struct {
     tokenType: TokenType, // VAR
     lexeme: []const u8, // 123
-    literal: ?[]u8, // 123
+    literal: ?Literal, // 123
 
     fn print(self: Token) !void {
         const writer = std.io.getStdOut().writer();
 
         if (self.tokenType == TokenType.STRING) {
-            try writer.print("{s} \"{s}\" {?s}\n", .{ @tagName(self.tokenType), self.lexeme, self.literal });
+            try writer.print("{s} \"{s}\" {?s}\n", .{ @tagName(self.tokenType), self.lexeme, self.literal.?.string });
             return;
         }
 
         if (self.tokenType == TokenType.NUMBER) {
-            const num = std.fmt.parseFloat(f32, self.lexeme) catch {
-                std.debug.print("Error: Could not parse number.\n", .{});
-                return;
-            };
-            if (isInt(self.lexeme)) {
-                try writer.print("{s} {s} {?d:.1}\n", .{ @tagName(self.tokenType), self.lexeme, num });
-            } else {
-                try writer.print("{s} {s} {?d}\n", .{ @tagName(self.tokenType), self.lexeme, num });
-            }
+            try writer.print("{s} {s} {?d}\n", .{ @tagName(self.tokenType), self.lexeme, self.literal.?.number });
             return;
         }
 
@@ -98,15 +95,26 @@ const Scanner = struct {
         self.current_start = self.current_end;
     }
 
-    fn addToken(self: *Scanner, tokenType: TokenType, is_literal: bool) void {
+    fn addToken(self: *Scanner, tokenType: TokenType) void {
         const str = self.source[self.current_start .. self.current_end + 1];
         const token = Token{
             .tokenType = tokenType,
             .lexeme = str,
-            .literal = if (is_literal) str else null,
+            .literal = switch (tokenType) {
+                TokenType.STRING => Literal{ .string = str },
+                TokenType.NUMBER => Literal{ .number = parseNumber(str) },
+                else => null,
+            },
         };
 
         self.tokens.append(token) catch unreachable;
+    }
+
+    fn parseNumber(str: []const u8) f64 {
+        // TODO: handle errors
+        return std.fmt.parseFloat(f64, str) catch {
+            return 0.0;
+        };
     }
 
     fn peek(self: Scanner) u8 {
@@ -130,16 +138,16 @@ const Scanner = struct {
             },
             ' ' => {},
             '\t' => {},
-            '(' => self.addToken(TokenType.LEFT_PAREN, false),
-            ')' => self.addToken(TokenType.RIGHT_PAREN, false),
-            '{' => self.addToken(TokenType.LEFT_BRACE, false),
-            '}' => self.addToken(TokenType.RIGHT_BRACE, false),
-            ';' => self.addToken(TokenType.SEMICOLON, false),
-            ',' => self.addToken(TokenType.COMMA, false),
-            '.' => self.addToken(TokenType.DOT, false),
-            '+' => self.addToken(TokenType.PLUS, false),
-            '-' => self.addToken(TokenType.MINUS, false),
-            '*' => self.addToken(TokenType.STAR, false),
+            '(' => self.addToken(TokenType.LEFT_PAREN),
+            ')' => self.addToken(TokenType.RIGHT_PAREN),
+            '{' => self.addToken(TokenType.LEFT_BRACE),
+            '}' => self.addToken(TokenType.RIGHT_BRACE),
+            ';' => self.addToken(TokenType.SEMICOLON),
+            ',' => self.addToken(TokenType.COMMA),
+            '.' => self.addToken(TokenType.DOT),
+            '+' => self.addToken(TokenType.PLUS),
+            '-' => self.addToken(TokenType.MINUS),
+            '*' => self.addToken(TokenType.STAR),
             '"' => {
                 while (self.peek() != '"' and self.peek() != '\n' and !self.isEnd()) {
                     self.advance();
@@ -147,7 +155,7 @@ const Scanner = struct {
 
                 if (self.peek() == '"') {
                     self.current_start += 1;
-                    self.addToken(TokenType.STRING, true);
+                    self.addToken(TokenType.STRING);
                     self.advance();
                 } else {
                     std.debug.print("[line {d}] Error: Unterminated string.\n", .{self.line});
@@ -159,42 +167,42 @@ const Scanner = struct {
                     self.advance();
                 }
 
-                self.addToken(TokenType.NUMBER, true);
+                self.addToken(TokenType.NUMBER);
             },
             '=' => {
                 const next_char = self.peek();
                 if (next_char == '=') {
                     self.advance();
-                    self.addToken(TokenType.EQUAL_EQUAL, false);
+                    self.addToken(TokenType.EQUAL_EQUAL);
                 } else {
-                    self.addToken(TokenType.EQUAL, false);
+                    self.addToken(TokenType.EQUAL);
                 }
             },
             '!' => {
                 const next_char = self.peek();
                 if (next_char == '=') {
                     self.advance();
-                    self.addToken(TokenType.BANG_EQUAL, false);
+                    self.addToken(TokenType.BANG_EQUAL);
                 } else {
-                    self.addToken(TokenType.BANG, false);
+                    self.addToken(TokenType.BANG);
                 }
             },
             '>' => {
                 const next_char = self.peek();
                 if (next_char == '=') {
                     self.advance();
-                    self.addToken(TokenType.GREATER_EQUAL, false);
+                    self.addToken(TokenType.GREATER_EQUAL);
                 } else {
-                    self.addToken(TokenType.GREATER, false);
+                    self.addToken(TokenType.GREATER);
                 }
             },
             '<' => {
                 const next_char = self.peek();
                 if (next_char == '=') {
                     self.advance();
-                    self.addToken(TokenType.LESS_EQUAL, false);
+                    self.addToken(TokenType.LESS_EQUAL);
                 } else {
-                    self.addToken(TokenType.LESS, false);
+                    self.addToken(TokenType.LESS);
                 }
             },
             '/' => {
@@ -204,7 +212,7 @@ const Scanner = struct {
                         self.advance();
                     }
                 } else {
-                    self.addToken(TokenType.SLASH, false);
+                    self.addToken(TokenType.SLASH);
                 }
             },
             'a'...'z', 'A'...'Z', '_' => {
@@ -212,9 +220,9 @@ const Scanner = struct {
                     self.advance();
                 }
 
-                self.addToken(TokenType.IDENTIFIER, false);
+                self.addToken(TokenType.IDENTIFIER);
             },
-            0 => self.addToken(TokenType.EOF, false),
+            0 => self.addToken(TokenType.EOF),
             else => {
                 std.debug.print("[line {d}] Error: Unexpected character: {c}\n", .{ self.line, char });
                 self.have_error = true;
