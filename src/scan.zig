@@ -219,7 +219,6 @@ pub const Scanner = struct {
                     self.advance();
                     return result;
                 } else {
-                    std.debug.print("[line {d}] Error: Unterminated string.\n", .{self.line});
                     return MatchResult{ .scan_error = ScannerError{ .message = "Unterminated string.", .line = self.line } };
                 }
             },
