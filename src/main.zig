@@ -1,304 +1,16 @@
 const std = @import("std");
+const scan = @import("scan.zig");
+const parse = @import("parse.zig");
 
-fn isInt(number: f64) bool {
-    const intVal: usize = @intFromFloat(number);
-    const casted: f64 = @floatFromInt(intVal);
-    return number == casted;
-}
-
-const TokenType = enum {
-    IDENTIFIER, // variable names
-    EQUAL, // =
-    STRING, // "string"
-    NUMBER, // 123
-    LEFT_PAREN, // (
-    RIGHT_PAREN, // )
-    LEFT_BRACE, // {
-    RIGHT_BRACE, // }
-    SEMICOLON, // ;
-    COMMA, // ,
-    DOT, // .
-    MINUS, // -
-    PLUS, // +
-    SLASH, // /
-    STAR, // *
-    EOF,
-    EQUAL_EQUAL, // ==
-    BANG, // !
-    BANG_EQUAL, // !=
-    LESS, // <
-    LESS_EQUAL, // <=
-    GREATER, // >
-    GREATER_EQUAL, // >=
-
-    // Keywords
-    AND, // and
-    VAR, // var
-    WHILE, // while
-    TRUE, // true
-    THIS, // this
-    SUPER, // super
-    RETURN, // return
-    PRINT, // print
-    OR, // or
-    NIL, // nil
-    IF, // if
-    FUN, // fun
-    FOR, // for
-    FALSE, // false
-    ELSE, // else
-    CLASS, // class
+const Command = enum {
+    Tokenize,
+    Parse,
 };
 
-// const NameMap = std.StaticStringMap(Foo).initComptime(.{
-//         .{ "c89", .b },
-//         .{ "c89", .a },
-//     });
-
-const keywordMap = std.StaticStringMap(TokenType).initComptime(.{
-    .{ "and", TokenType.AND },
-    .{ "var", TokenType.VAR },
-    .{ "while", TokenType.WHILE },
-    .{ "true", TokenType.TRUE },
-    .{ "this", TokenType.THIS },
-    .{ "super", TokenType.SUPER },
-    .{ "return", TokenType.RETURN },
-    .{ "print", TokenType.PRINT },
-    .{ "or", TokenType.OR },
-    .{ "nil", TokenType.NIL },
-    .{ "if", TokenType.IF },
-    .{ "fun", TokenType.FUN },
-    .{ "for", TokenType.FOR },
-    .{ "false", TokenType.FALSE },
-    .{ "else", TokenType.ELSE },
-    .{ "class", TokenType.CLASS },
+const commands = std.StaticStringMap(Command).initComptime(.{
+    .{ "tokenize", .Tokenize },
+    .{ "parse", .Parse },
 });
-
-const Literal = union {
-    string: []const u8,
-    number: f64,
-};
-
-const Token = struct {
-    tokenType: TokenType, // VAR
-    lexeme: []const u8, // 123
-    literal: ?Literal, // 123
-
-    fn print(self: Token) !void {
-        const writer = std.io.getStdOut().writer();
-
-        if (self.tokenType == TokenType.STRING) {
-            try writer.print("{s} \"{s}\" {?s}\n", .{ @tagName(self.tokenType), self.lexeme, self.literal.?.string });
-            return;
-        }
-
-        if (self.tokenType == TokenType.NUMBER) {
-            const number = self.literal.?.number;
-            if (isInt(number)) {
-                try writer.print("{s} {s} {?d:.1}\n", .{ @tagName(self.tokenType), self.lexeme, number });
-            } else {
-                try writer.print("{s} {s} {?d}\n", .{ @tagName(self.tokenType), self.lexeme, number });
-            }
-            return;
-        }
-
-        try writer.print("{s} {s} {any}\n", .{ @tagName(self.tokenType), self.lexeme, self.literal });
-    }
-};
-
-const Scanner = struct {
-    source: []u8,
-    tokens: std.ArrayList(Token),
-
-    current_start: u32,
-    current_end: u32,
-    line: u32,
-
-    have_error: bool,
-
-    fn init(source: []u8, allocator: std.mem.Allocator) Scanner {
-        return .{
-            .source = source,
-            .tokens = std.ArrayList(Token).init(allocator),
-            .current_start = 0,
-            .current_end = 0,
-            .line = 1,
-            .have_error = false,
-        };
-    }
-
-    fn advance(self: *Scanner) void {
-        self.current_end += 1;
-    }
-
-    fn reset_start(self: *Scanner) void {
-        self.current_start = self.current_end;
-    }
-
-    fn currentStr(self: Scanner) []const u8 {
-        return self.source[self.current_start .. self.current_end + 1];
-    }
-
-    fn addToken(self: *Scanner, tokenType: TokenType) void {
-        const str = self.currentStr();
-        const token = Token{
-            .tokenType = tokenType,
-            .lexeme = str,
-            .literal = switch (tokenType) {
-                TokenType.STRING => Literal{ .string = str },
-                TokenType.NUMBER => Literal{ .number = parseNumber(str) },
-                else => null,
-            },
-        };
-
-        self.tokens.append(token) catch unreachable;
-    }
-
-    fn parseNumber(str: []const u8) f64 {
-        // TODO: handle errors
-        return std.fmt.parseFloat(f64, str) catch {
-            return 0.0;
-        };
-    }
-
-    fn peek(self: Scanner) u8 {
-        if (self.isEnd()) {
-            return 0;
-        }
-
-        if (self.current_end + 1 >= self.source.len) {
-            return 0;
-        }
-
-        return self.source[self.current_end + 1];
-    }
-
-    fn match(self: *Scanner) void {
-        const char = self.source[self.current_end];
-
-        switch (char) {
-            '\n' => {
-                self.line += 1;
-            },
-            ' ' => {},
-            '\t' => {},
-            '(' => self.addToken(TokenType.LEFT_PAREN),
-            ')' => self.addToken(TokenType.RIGHT_PAREN),
-            '{' => self.addToken(TokenType.LEFT_BRACE),
-            '}' => self.addToken(TokenType.RIGHT_BRACE),
-            ';' => self.addToken(TokenType.SEMICOLON),
-            ',' => self.addToken(TokenType.COMMA),
-            '.' => self.addToken(TokenType.DOT),
-            '+' => self.addToken(TokenType.PLUS),
-            '-' => self.addToken(TokenType.MINUS),
-            '*' => self.addToken(TokenType.STAR),
-            '"' => {
-                while (self.peek() != '"' and self.peek() != '\n' and !self.isEnd()) {
-                    self.advance();
-                }
-
-                if (self.peek() == '"') {
-                    self.current_start += 1;
-                    self.addToken(TokenType.STRING);
-                    self.advance();
-                } else {
-                    std.debug.print("[line {d}] Error: Unterminated string.\n", .{self.line});
-                    self.have_error = true;
-                }
-            },
-            '0'...'9' => {
-                while (std.ascii.isDigit(self.peek()) or self.peek() == '.') {
-                    self.advance();
-                }
-
-                self.addToken(TokenType.NUMBER);
-            },
-            '=' => {
-                const next_char = self.peek();
-                if (next_char == '=') {
-                    self.advance();
-                    self.addToken(TokenType.EQUAL_EQUAL);
-                } else {
-                    self.addToken(TokenType.EQUAL);
-                }
-            },
-            '!' => {
-                const next_char = self.peek();
-                if (next_char == '=') {
-                    self.advance();
-                    self.addToken(TokenType.BANG_EQUAL);
-                } else {
-                    self.addToken(TokenType.BANG);
-                }
-            },
-            '>' => {
-                const next_char = self.peek();
-                if (next_char == '=') {
-                    self.advance();
-                    self.addToken(TokenType.GREATER_EQUAL);
-                } else {
-                    self.addToken(TokenType.GREATER);
-                }
-            },
-            '<' => {
-                const next_char = self.peek();
-                if (next_char == '=') {
-                    self.advance();
-                    self.addToken(TokenType.LESS_EQUAL);
-                } else {
-                    self.addToken(TokenType.LESS);
-                }
-            },
-            '/' => {
-                const next_char = self.peek();
-                if (next_char == '/') {
-                    while (!self.isEnd() and self.peek() != '\n') {
-                        self.advance();
-                    }
-                } else {
-                    self.addToken(TokenType.SLASH);
-                }
-            },
-            'a'...'z', 'A'...'Z', '_' => {
-                while (std.ascii.isAlphanumeric(self.peek()) or self.peek() == '_') {
-                    self.advance();
-                }
-
-                const str = self.currentStr();
-                const keyword = keywordMap.get(str);
-                if (keyword != null) {
-                    self.addToken(keyword.?);
-                    return;
-                }
-
-                self.addToken(TokenType.IDENTIFIER);
-            },
-            0 => self.addToken(TokenType.EOF),
-            else => {
-                std.debug.print("[line {d}] Error: Unexpected character: {c}\n", .{ self.line, char });
-                self.have_error = true;
-            },
-        }
-    }
-
-    fn isEnd(self: Scanner) bool {
-        return self.current_end >= self.source.len;
-    }
-
-    fn scan(self: *Scanner) void {
-        while (!self.isEnd()) {
-            self.match();
-            self.advance();
-            self.reset_start();
-        }
-
-        self.tokens.append(Token{
-            .tokenType = TokenType.EOF,
-            .lexeme = "",
-            .literal = null,
-        }) catch unreachable;
-    }
-};
 
 pub fn main() !void {
     const args = try std.process.argsAlloc(std.heap.page_allocator);
@@ -309,25 +21,56 @@ pub fn main() !void {
         std.process.exit(1);
     }
 
-    const command = args[1];
     const filename = args[2];
-
-    if (!std.mem.eql(u8, command, "tokenize")) {
-        std.debug.print("Unknown command: {s}\n", .{command});
-        std.process.exit(0);
+    const command = commands.get(args[1]);
+    if (command == null) {
+        std.debug.print("Unknown command: {s}\n", .{args[1]});
+        std.process.exit(1);
     }
+
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const alloc = gpa.allocator();
 
     const file_contents = try std.fs.cwd().readFileAlloc(std.heap.page_allocator, filename, std.math.maxInt(usize));
     defer std.heap.page_allocator.free(file_contents);
 
-    var scanner = Scanner.init(file_contents, std.heap.page_allocator);
-    scanner.scan();
+    const tokens = try scanTokens(alloc, file_contents);
 
-    for (scanner.tokens.items) |token| {
-        try token.print();
+    if (command == Command.Tokenize) {
+        for (tokens) |token| {
+            try token.print();
+        }
+        return;
     }
 
-    if (scanner.have_error) {
-        std.process.exit(65);
+    var parser = try parse.Parser.init(tokens, alloc);
+    try parser.parse();
+}
+
+fn scanTokens(alloc: std.mem.Allocator, file_contents: []u8) ![]scan.Token {
+    var tokens = std.ArrayList(scan.Token).init(alloc);
+    defer tokens.deinit();
+
+    var scanner = scan.Scanner.init(file_contents);
+    while (true) {
+        const scan_result = scanner.scanToken();
+
+        switch (scan_result) {
+            .none => {},
+            .scan_error => {
+                std.debug.print("Scanning error: {s}\n", .{scan_result.scan_error.message});
+                return error.ScanError;
+            },
+            .token => |token| {
+                try tokens.append(token);
+                if (token.tokenType == scan.TokenType.EOF) {
+                    break;
+                }
+            },
+        }
+
+        scanner.prepare_next_token();
     }
+
+    return tokens.toOwnedSlice();
 }
