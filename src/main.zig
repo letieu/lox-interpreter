@@ -35,6 +35,9 @@ pub fn main() !void {
     defer std.heap.page_allocator.free(file_contents);
 
     const tokens = try scanTokens(alloc, file_contents, command == Command.Tokenize);
+    if (command == Command.Tokenize) {
+        return;
+    }
 
     var parser = try parse.Parser.init(tokens, alloc);
     try parser.parse();
