@@ -25,7 +25,7 @@ pub fn main() !void {
     const command = commands.get(args[1]);
     if (command == null) {
         std.debug.print("Unknown command: {s}\n", .{args[1]});
-        std.process.exit(65);
+        std.process.exit(1);
     }
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -34,7 +34,9 @@ pub fn main() !void {
     const file_contents = try std.fs.cwd().readFileAlloc(std.heap.page_allocator, filename, std.math.maxInt(usize));
     defer std.heap.page_allocator.free(file_contents);
 
-    const tokens = try scanTokens(alloc, file_contents);
+    const tokens = scanTokens(alloc, file_contents) catch {
+        std.process.exit(65);
+    };
 
     if (command == Command.Tokenize) {
         for (tokens) |token| {
@@ -58,7 +60,6 @@ fn scanTokens(alloc: std.mem.Allocator, file_contents: []u8) ![]scan.Token {
         switch (scan_result) {
             .none => {},
             .scan_error => {
-                std.debug.print("Scanning error: {s}\n", .{scan_result.scan_error.message});
                 return error.ScanError;
             },
             .token => |token| {
