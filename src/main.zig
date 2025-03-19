@@ -34,7 +34,7 @@ pub fn main() !void {
     const file_contents = try std.fs.cwd().readFileAlloc(std.heap.page_allocator, filename, std.math.maxInt(usize));
     defer std.heap.page_allocator.free(file_contents);
 
-    const tokens = try scanTokens(alloc, file_contents, command == Command.Tokenize) catch {
+    const tokens = scanTokens(alloc, file_contents, command == Command.Tokenize) catch {
         std.process.exit(65);
     };
 
