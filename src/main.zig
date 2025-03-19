@@ -34,7 +34,10 @@ pub fn main() !void {
     const file_contents = try std.fs.cwd().readFileAlloc(std.heap.page_allocator, filename, std.math.maxInt(usize));
     defer std.heap.page_allocator.free(file_contents);
 
-    const tokens = try scanTokens(alloc, file_contents, command == Command.Tokenize);
+    const tokens = try scanTokens(alloc, file_contents, command == Command.Tokenize) catch {
+        std.process.exit(65);
+    };
+
     if (command == Command.Tokenize) {
         return;
     }
@@ -55,7 +58,7 @@ fn scanTokens(alloc: std.mem.Allocator, file_contents: []u8, should_print: bool)
             .none => {},
             .scan_error => {
                 std.debug.print("[line {d}] Error: {s}\n", .{ scanner.line, scan_result.scan_error.message });
-                break;
+                return error.ScanError;
             },
             .token => |token| {
                 if (should_print) {
