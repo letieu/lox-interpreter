@@ -25,7 +25,7 @@ pub fn main() !void {
     const command = commands.get(args[1]);
     if (command == null) {
         std.debug.print("Unknown command: {s}\n", .{args[1]});
-        std.process.exit(1);
+        std.process.exit(65);
     }
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
