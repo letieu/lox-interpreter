@@ -292,8 +292,17 @@ pub const Scanner = struct {
             },
             0 => return self.matchToken(TokenType.EOF),
             else => {
-                std.debug.print("[line {d}] Error: Unexpected character: {c}\n", .{ self.line, char });
-                return MatchResult{ .scan_error = ScannerError{ .message = "Unexpected character.", .line = self.line } };
+                const alloc = std.heap.page_allocator;
+                const message = std.fmt.allocPrint(alloc, "Unexpected character: {c}", .{char}) catch {
+                    return MatchResult{ .scan_error = ScannerError{
+                        .message = "Unexpected character.",
+                        .line = self.line,
+                    } };
+                };
+                return MatchResult{ .scan_error = ScannerError{
+                    .message = message,
+                    .line = self.line,
+                } };
             },
         }
     }
@@ -317,8 +326,9 @@ pub fn scanTokens(alloc: std.mem.Allocator, file_contents: []u8, should_print: b
         switch (scan_result) {
             .none => {},
             .scan_error => {
-                std.debug.print("[line {d}] Error: {s}\n", .{ scanner.line, scan_result.scan_error.message });
                 have_error = true;
+                std.debug.print("[line {d}] Error: {s}\n", .{ scanner.line, scan_result.scan_error.message });
+                scanner.prepare_next_token();
                 continue;
             },
             .token => |token| {
@@ -331,6 +341,10 @@ pub fn scanTokens(alloc: std.mem.Allocator, file_contents: []u8, should_print: b
                     break;
                 }
             },
+        }
+
+        if (scanner.isEnd()) {
+            break;
         }
 
         scanner.prepare_next_token();
