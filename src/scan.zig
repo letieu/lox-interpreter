@@ -303,3 +303,42 @@ pub const Scanner = struct {
         self.current_start = self.current_end;
     }
 };
+
+pub fn scanTokens(alloc: std.mem.Allocator, file_contents: []u8, should_print: bool) ![]Token {
+    var tokens = std.ArrayList(Token).init(alloc);
+    defer tokens.deinit();
+
+    var have_error = false;
+
+    var scanner = Scanner.init(file_contents);
+    while (true) {
+        const scan_result = scanner.scanToken();
+
+        switch (scan_result) {
+            .none => {},
+            .scan_error => {
+                std.debug.print("[line {d}] Error: {s}\n", .{ scanner.line, scan_result.scan_error.message });
+                have_error = true;
+                continue;
+            },
+            .token => |token| {
+                if (should_print) {
+                    try token.print();
+                }
+
+                try tokens.append(token);
+                if (token.tokenType == TokenType.EOF) {
+                    break;
+                }
+            },
+        }
+
+        scanner.prepare_next_token();
+    }
+
+    if (have_error) {
+        return error.ScanningError;
+    }
+
+    return tokens.toOwnedSlice();
+}

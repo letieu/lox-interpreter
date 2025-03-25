@@ -34,7 +34,7 @@ pub fn main() !void {
     const file_contents = try std.fs.cwd().readFileAlloc(std.heap.page_allocator, filename, std.math.maxInt(usize));
     defer std.heap.page_allocator.free(file_contents);
 
-    const tokens = scanTokens(alloc, file_contents, command == Command.Tokenize) catch {
+    const tokens = scan.scanTokens(alloc, file_contents, command == Command.Tokenize) catch {
         std.process.exit(65);
     };
 
@@ -44,36 +44,4 @@ pub fn main() !void {
 
     var parser = try parse.Parser.init(tokens, alloc);
     try parser.parse();
-}
-
-fn scanTokens(alloc: std.mem.Allocator, file_contents: []u8, should_print: bool) ![]scan.Token {
-    var tokens = std.ArrayList(scan.Token).init(alloc);
-    defer tokens.deinit();
-
-    var scanner = scan.Scanner.init(file_contents);
-    while (true) {
-        const scan_result = scanner.scanToken();
-
-        switch (scan_result) {
-            .none => {},
-            .scan_error => {
-                std.debug.print("[line {d}] Error: {s}\n", .{ scanner.line, scan_result.scan_error.message });
-                return error.ScanError;
-            },
-            .token => |token| {
-                if (should_print) {
-                    try token.print();
-                }
-
-                try tokens.append(token);
-                if (token.tokenType == scan.TokenType.EOF) {
-                    break;
-                }
-            },
-        }
-
-        scanner.prepare_next_token();
-    }
-
-    return tokens.toOwnedSlice();
 }
