@@ -324,7 +324,10 @@ pub fn scanTokens(alloc: std.mem.Allocator, file_contents: []u8, should_print: b
         const scan_result = scanner.scanToken();
 
         switch (scan_result) {
-            .none => {},
+            .none => {
+                scanner.prepare_next_token();
+                continue;
+            },
             .scan_error => {
                 have_error = true;
                 std.debug.print("[line {d}] Error: {s}\n", .{ scanner.line, scan_result.scan_error.message });
