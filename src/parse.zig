@@ -53,7 +53,7 @@ pub const Parser = struct {
                     }
                 },
                 else => {
-                    try std.io.getStdOut().writer().print("hihi", .{});
+                    try std.io.getStdOut().writer().print("{s}\n", .{item.token.lexeme});
                 },
             }
         }
