@@ -1,4 +1,5 @@
 const std = @import("std");
+
 const scan = @import("scan.zig");
 
 pub const Statement = struct {
@@ -40,7 +41,21 @@ pub const Parser = struct {
 
     pub fn parse(self: *Parser) !void {
         for (self.statements.items) |item| {
-            try item.print();
+            switch (item.token.tokenType) {
+                .STRING => {
+                    try std.io.getStdOut().writer().print("{s}\n", .{item.token.literal.?.string});
+                },
+                .NUMBER => {
+                    if (@rem(item.token.literal.?.number, 1.0) == 0.0) {
+                        try std.io.getStdOut().writer().print("{d:.1}\n", .{item.token.literal.?.number});
+                    } else {
+                        try std.io.getStdOut().writer().print("{d}\n", .{item.token.literal.?.number});
+                    }
+                },
+                else => {
+                    try std.io.getStdOut().writer().print("hihi", .{});
+                },
+            }
         }
         return;
     }
