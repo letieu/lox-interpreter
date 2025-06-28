@@ -43,5 +43,7 @@ pub fn main() !void {
     }
 
     var parser = try parse.Parser.init(tokens, alloc);
-    try parser.parse();
+    const expr = parser.parseExpression();
+
+    std.log.debug("exkpr {}", .{expr});
 }
