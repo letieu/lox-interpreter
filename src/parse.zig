@@ -12,21 +12,21 @@ const scan = @import("scan.zig");
 // primary        → NUMBER | STRING | "true" | "false" | "nil"
 //                | "(" expression ")" ;
 
-const Expr = union(enum) {
+pub const Expr = union(enum) {
     Literal: LiteralExpr,
     Unary: UnaryExpr,
     Binary: BinaryExpr,
     Grouping: GroupingExpr,
 };
 
-const LiteralType = enum {
+pub const LiteralType = enum {
     NUMBER,
     STRING,
     TRUE,
     FALSE,
     NIL,
 };
-const LiteralExpr = union(LiteralType) {
+pub const LiteralExpr = union(LiteralType) {
     NUMBER: f64,
     STRING: []const u8,
     TRUE,
@@ -34,19 +34,19 @@ const LiteralExpr = union(LiteralType) {
     NIL,
 };
 
-const UnaryExpr = struct {
+pub const UnaryExpr = struct {
     operator: scan.Token,
-    right: *const Expr,
+    right: *Expr,
 };
 
-const BinaryExpr = struct {
-    left: *const Expr,
-    right: *const Expr,
+pub const BinaryExpr = struct {
+    left: *Expr,
+    right: *Expr,
     operator: scan.Token,
 };
 
-const GroupingExpr = struct {
-    expression: *const Expr,
+pub const GroupingExpr = struct {
+    expression: *Expr,
 };
 
 pub const Parser = struct {
@@ -65,25 +65,30 @@ pub const Parser = struct {
         };
     }
 
-    pub fn parseExpression(self: *Parser) *const Expr {
+    pub fn parseExpression(self: *Parser) Expr {
         return self.parseEquality();
     }
 
-    pub fn parseEquality(self: *Parser) *const Expr {
+    pub fn parseEquality(self: *Parser) Expr {
         // equality       → comparison ( ( "!=" | "==" ) comparison )* ;
         var expr = self.parseComparison();
 
         while (self.is(scan.TokenType.BANG_EQUAL) or self.is(scan.TokenType.EQUAL_EQUAL)) {
             const operator = self.currentToken();
             self.advance();
-            const right = self.parseComparison();
 
-            expr = &Expr{ .Binary = BinaryExpr{ .left = expr, .operator = operator, .right = right } };
+            const left = self.alloc.create(Expr) catch unreachable;
+            const right = self.alloc.create(Expr) catch unreachable;
+
+            left.* = expr;
+            right.* = self.parseComparison();
+
+            expr = Expr{ .Binary = BinaryExpr{ .left = left, .operator = operator, .right = right } };
         }
         return expr;
     }
 
-    pub fn parseComparison(self: *Parser) *const Expr {
+    pub fn parseComparison(self: *Parser) Expr {
         // comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
         var expr = self.parseTerm();
         while (self.is(scan.TokenType.GREATER) or
@@ -93,85 +98,110 @@ pub const Parser = struct {
         {
             const operator = self.currentToken();
             self.advance();
-            const right = self.parseTerm();
-            expr = &Expr{ .Binary = BinaryExpr{ .left = expr, .operator = operator, .right = right } };
+
+            const left = self.alloc.create(Expr) catch unreachable;
+            const right = self.alloc.create(Expr) catch unreachable;
+
+            left.* = expr;
+            right.* = self.parseTerm();
+
+            expr = Expr{ .Binary = BinaryExpr{ .left = left, .operator = operator, .right = right } };
         }
         return expr;
     }
 
-    pub fn parseTerm(self: *Parser) *const Expr {
+    pub fn parseTerm(self: *Parser) Expr {
         // term           → factor ( ( "-" | "+" ) factor )* ;
         var expr = self.parseFactor();
 
         while (self.is(scan.TokenType.MINUS) or self.is(scan.TokenType.PLUS)) {
             const operator = self.currentToken();
             self.advance();
-            const right = self.parseFactor();
-            expr = &Expr{ .Binary = BinaryExpr{ .left = expr, .operator = operator, .right = right } };
+
+            const left = self.alloc.create(Expr) catch unreachable;
+            const right = self.alloc.create(Expr) catch unreachable;
+
+            left.* = expr;
+            right.* = self.parseFactor();
+
+            expr = Expr{ .Binary = BinaryExpr{ .left = left, .operator = operator, .right = right } };
         }
         return expr;
     }
 
-    pub fn parseFactor(self: *Parser) *const Expr {
+    pub fn parseFactor(self: *Parser) Expr {
         // factor         → unary ( ( "/" | "*" ) unary )* ;
         var expr = self.parseUnary();
         while (self.is(scan.TokenType.STAR) or self.is(scan.TokenType.SLASH)) {
             const operator = self.currentToken();
             self.advance();
-            const right = self.parseUnary();
-            expr = &Expr{ .Binary = BinaryExpr{ .left = expr, .operator = operator, .right = right } };
+
+            const left = self.alloc.create(Expr) catch unreachable;
+            const right = self.alloc.create(Expr) catch unreachable;
+
+            left.* = expr;
+            right.* = self.parseUnary();
+
+            expr = Expr{ .Binary = BinaryExpr{ .left = left, .operator = operator, .right = right } };
         }
         return expr;
     }
 
-    pub fn parseUnary(self: *Parser) *const Expr {
+    pub fn parseUnary(self: *Parser) Expr {
         // unary          → ( "!" | "-" ) unary | primary
         while (self.is(scan.TokenType.BANG) or self.is(scan.TokenType.MINUS)) {
             const operator = self.currentToken();
             self.advance();
-            const right = self.parseUnary();
-            return &Expr{ .Unary = UnaryExpr{ .operator = operator, .right = right } };
+
+            const right = self.alloc.create(Expr) catch unreachable;
+            right.* = self.parseUnary();
+
+            return Expr{ .Unary = UnaryExpr{ .operator = operator, .right = right } };
         }
 
         return self.parsePrimary();
     }
 
-    pub fn parsePrimary(self: *Parser) *const Expr {
+    pub fn parsePrimary(self: *Parser) Expr {
         // primary        → NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" ;
 
         if (self.is(scan.TokenType.TRUE)) {
             self.advance();
-            return &Expr{ .Literal = LiteralExpr.TRUE };
+            return Expr{ .Literal = LiteralExpr.TRUE };
         }
 
         if (self.is(scan.TokenType.FALSE)) {
             self.advance();
-            return &Expr{ .Literal = LiteralExpr.FALSE };
+            return Expr{ .Literal = LiteralExpr.FALSE };
         }
 
         if (self.currentToken().tokenType == scan.TokenType.NIL) {
             self.advance();
-            return &Expr{ .Literal = LiteralExpr.NIL };
+            return Expr{ .Literal = LiteralExpr.NIL };
         }
 
         if (self.currentToken().tokenType == scan.TokenType.NUMBER) {
+            const numberValue = self.currentToken().literal.?.number;
             self.advance();
-            return &Expr{ .Literal = LiteralExpr{ .NUMBER = self.currentToken().literal.?.number } };
+            return Expr{ .Literal = LiteralExpr{ .NUMBER = numberValue } };
         }
 
         if (self.currentToken().tokenType == scan.TokenType.STRING) {
+            const stringValue = self.currentToken().literal.?.string;
             self.advance();
-            return &Expr{ .Literal = LiteralExpr{ .STRING = self.currentToken().literal.?.string } };
+            return Expr{ .Literal = LiteralExpr{ .STRING = stringValue } };
         }
 
         if (self.currentToken().tokenType == scan.TokenType.LEFT_PAREN) {
-            const expr = self.parseExpression();
+            const expr = self.alloc.create(Expr) catch unreachable;
+            self.advance();
+            expr.* = self.parseExpression();
             if (self.currentToken().tokenType != scan.TokenType.RIGHT_PAREN) {
                 std.debug.print("Expected ')'", .{});
                 std.process.exit(1); // TODO: handle error
             }
             self.advance();
-            return &Expr{ .Grouping = GroupingExpr{ .expression = expr } };
+            return Expr{ .Grouping = GroupingExpr{ .expression = expr } };
         }
 
         std.debug.print("Unexpected token: {}\n", .{self.currentToken().tokenType});

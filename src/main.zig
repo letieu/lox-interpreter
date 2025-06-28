@@ -1,6 +1,7 @@
 const std = @import("std");
 const scan = @import("scan.zig");
 const parse = @import("parse.zig");
+const astPrint = @import("ast-print.zig");
 
 const Command = enum {
     Tokenize,
@@ -45,5 +46,5 @@ pub fn main() !void {
     var parser = try parse.Parser.init(tokens, alloc);
     const expr = parser.parseExpression();
 
-    std.log.debug("exkpr {}", .{expr});
+    astPrint.printExpr(&expr);
 }
