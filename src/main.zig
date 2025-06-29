@@ -13,7 +13,7 @@ const Command = enum {
 const commands = std.StaticStringMap(Command).initComptime(.{
     .{ "tokenize", .Tokenize },
     .{ "parse", .Parse },
-    .{ "evaluate", .Parse },
+    .{ "evaluate", .Evaluate },
 });
 
 pub fn main() !void {
@@ -59,5 +59,5 @@ pub fn main() !void {
     }
 
     const result = evaluate.evaluate(&expr);
-    try std.io.getStdOut().writer().print("{s}", .{result});
+    try std.io.getStdOut().writer().print("hihi {s}", .{result});
 }
