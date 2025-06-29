@@ -76,6 +76,10 @@ fn evaluateBinary(binary: parser.BinaryExpr) EvalError!EvalResult {
             .MINUS => return EvalResult{ .number = left.number - right.number },
             .STAR => return EvalResult{ .number = left.number * right.number },
             .SLASH => return EvalResult{ .number = left.number / right.number },
+            .GREATER => return EvalResult{ .boolean = left.number > right.number},
+            .GREATER_EQUAL => return EvalResult{ .boolean = left.number >= right.number},
+            .LESS => return EvalResult{ .boolean = left.number < right.number},
+            .LESS_EQUAL => return EvalResult{ .boolean = left.number <= right.number},
             else => return EvalError.Invalid,
         }
     }
