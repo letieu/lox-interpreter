@@ -58,6 +58,15 @@ pub fn main() !void {
         return;
     }
 
-    const result = evaluate.evaluate(&expr);
-    try std.io.getStdOut().writer().print("{s}", .{result});
+    const result = evaluate.evaluate(&expr) catch {
+        try std.io.getStdOut().writer().print("Runtime error", .{});
+        std.process.exit(65);
+    };
+
+    switch (result) {
+        .boolean => try std.io.getStdOut().writer().print("{?}", .{result.boolean}),
+        .number => try std.io.getStdOut().writer().print("{d}", .{result.number}),
+        .string => try std.io.getStdOut().writer().print("{s}", .{result.string}),
+        .nil => try std.io.getStdOut().writer().print("nil", .{}),
+    }
 }
