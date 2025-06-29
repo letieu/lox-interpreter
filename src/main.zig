@@ -44,7 +44,9 @@ pub fn main() !void {
     }
 
     var parser = try parse.Parser.init(tokens, alloc);
-    const expr = parser.parseExpression();
+    const expr = parser.parse() catch {
+        std.process.exit(65);
+    };
 
     const printer = astPrint.AstPrinter.init();
     try printer.printExpression(&expr);

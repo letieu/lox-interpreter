@@ -49,10 +49,21 @@ pub const GroupingExpr = struct {
     expression: *Expr,
 };
 
+pub const ParseMessage = struct {
+    token: scan.Token,
+    message: []const u8,
+};
+
+pub const ParseError = error{
+    SyntaxError,
+    AllocationError,
+};
+
 pub const Parser = struct {
     alloc: std.mem.Allocator,
     tokens: []scan.Token,
     current: usize = 0,
+    errors: std.ArrayList(ParseMessage),
 
     pub fn init(
         tokens: []scan.Token,
@@ -62,16 +73,39 @@ pub const Parser = struct {
             .tokens = tokens,
             .current = 0,
             .alloc = alloc,
+            .errors = std.ArrayList(ParseMessage).init(alloc),
         };
     }
 
-    pub fn parseExpression(self: *Parser) Expr {
+    pub fn deinit(self: *Parser) void {
+        self.errors.deinit();
+    }
+
+    pub fn parse(self: *Parser) !Expr {
+        const expr = self.parseExpression() orelse {
+            return ParseError.SyntaxError;
+        };
+        if (self.errors.items.len > 0) {
+            return ParseError.SyntaxError;
+        }
+        return expr;
+    }
+
+    fn reportError(self: *Parser, token: scan.Token, message: []const u8) void {
+        self.errors.append(.{ .message = message, .token = token }) catch unreachable;
+        std.io.getStdErr().writer().print("[line {}] Error at '{s}': {s}", .{ token.line, token.lexeme, message }) catch {
+            std.debug.print("Print error failed", .{});
+        };
+    }
+
+    fn parseExpression(self: *Parser) ?Expr {
+        // expression     → equality ;
         return self.parseEquality();
     }
 
-    pub fn parseEquality(self: *Parser) Expr {
+    fn parseEquality(self: *Parser) ?Expr {
         // equality       → comparison ( ( "!=" | "==" ) comparison )* ;
-        var expr = self.parseComparison();
+        var expr = self.parseComparison() orelse return null;
 
         while (self.is(scan.TokenType.BANG_EQUAL) or self.is(scan.TokenType.EQUAL_EQUAL)) {
             const operator = self.currentToken();
@@ -81,16 +115,16 @@ pub const Parser = struct {
             const right = self.alloc.create(Expr) catch unreachable;
 
             left.* = expr;
-            right.* = self.parseComparison();
+            right.* = self.parseComparison() orelse return null;
 
             expr = Expr{ .Binary = BinaryExpr{ .left = left, .operator = operator, .right = right } };
         }
         return expr;
     }
 
-    pub fn parseComparison(self: *Parser) Expr {
+    fn parseComparison(self: *Parser) ?Expr {
         // comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
-        var expr = self.parseTerm();
+        var expr = self.parseTerm() orelse return null;
         while (self.is(scan.TokenType.GREATER) or
             self.is(scan.TokenType.GREATER_EQUAL) or
             self.is(scan.TokenType.LESS) or
@@ -103,16 +137,16 @@ pub const Parser = struct {
             const right = self.alloc.create(Expr) catch unreachable;
 
             left.* = expr;
-            right.* = self.parseTerm();
+            right.* = self.parseTerm() orelse return null;
 
             expr = Expr{ .Binary = BinaryExpr{ .left = left, .operator = operator, .right = right } };
         }
         return expr;
     }
 
-    pub fn parseTerm(self: *Parser) Expr {
+    fn parseTerm(self: *Parser) ?Expr {
         // term           → factor ( ( "-" | "+" ) factor )* ;
-        var expr = self.parseFactor();
+        var expr = self.parseFactor() orelse return null;
 
         while (self.is(scan.TokenType.MINUS) or self.is(scan.TokenType.PLUS)) {
             const operator = self.currentToken();
@@ -122,16 +156,16 @@ pub const Parser = struct {
             const right = self.alloc.create(Expr) catch unreachable;
 
             left.* = expr;
-            right.* = self.parseFactor();
+            right.* = self.parseFactor() orelse return null;
 
             expr = Expr{ .Binary = BinaryExpr{ .left = left, .operator = operator, .right = right } };
         }
         return expr;
     }
 
-    pub fn parseFactor(self: *Parser) Expr {
+    fn parseFactor(self: *Parser) ?Expr {
         // factor         → unary ( ( "/" | "*" ) unary )* ;
-        var expr = self.parseUnary();
+        var expr = self.parseUnary() orelse return null;
         while (self.is(scan.TokenType.STAR) or self.is(scan.TokenType.SLASH)) {
             const operator = self.currentToken();
             self.advance();
@@ -140,21 +174,21 @@ pub const Parser = struct {
             const right = self.alloc.create(Expr) catch unreachable;
 
             left.* = expr;
-            right.* = self.parseUnary();
+            right.* = self.parseUnary() orelse return null;
 
             expr = Expr{ .Binary = BinaryExpr{ .left = left, .operator = operator, .right = right } };
         }
         return expr;
     }
 
-    pub fn parseUnary(self: *Parser) Expr {
+    fn parseUnary(self: *Parser) ?Expr {
         // unary          → ( "!" | "-" ) unary | primary
         while (self.is(scan.TokenType.BANG) or self.is(scan.TokenType.MINUS)) {
             const operator = self.currentToken();
             self.advance();
 
             const right = self.alloc.create(Expr) catch unreachable;
-            right.* = self.parseUnary();
+            right.* = self.parseUnary() orelse return null;
 
             return Expr{ .Unary = UnaryExpr{ .operator = operator, .right = right } };
         }
@@ -162,7 +196,7 @@ pub const Parser = struct {
         return self.parsePrimary();
     }
 
-    pub fn parsePrimary(self: *Parser) Expr {
+    fn parsePrimary(self: *Parser) ?Expr {
         // primary        → NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" ;
 
         if (self.is(scan.TokenType.TRUE)) {
@@ -195,17 +229,19 @@ pub const Parser = struct {
         if (self.currentToken().tokenType == scan.TokenType.LEFT_PAREN) {
             const expr = self.alloc.create(Expr) catch unreachable;
             self.advance();
-            expr.* = self.parseExpression();
-            if (self.currentToken().tokenType != scan.TokenType.RIGHT_PAREN) {
-                std.debug.print("Expected ')'", .{});
-                std.process.exit(1); // TODO: handle error
+            expr.* = self.parseExpression() orelse return null;
+            const token = self.currentToken();
+            if (token.tokenType != scan.TokenType.RIGHT_PAREN) {
+                self.reportError(token, "Expected ')'.");
+                return null;
             }
             self.advance();
             return Expr{ .Grouping = GroupingExpr{ .expression = expr } };
         }
 
-        std.debug.print("Unexpected token: {}\n", .{self.currentToken().tokenType});
-        std.process.exit(1); // Or return an error instead
+        const token = self.currentToken();
+        self.reportError(token, "Expected expression.");
+        return null;
     }
 
     fn previousToken(self: *Parser) scan.Token {

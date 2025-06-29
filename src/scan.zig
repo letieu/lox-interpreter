@@ -84,6 +84,7 @@ pub const Token = struct {
     tokenType: TokenType, // VAR
     lexeme: []const u8, // 123
     literal: ?Literal, // 123
+    line: usize,
 
     pub fn print(self: Token) !void {
         const writer = std.io.getStdOut().writer();
@@ -152,6 +153,7 @@ pub const Scanner = struct {
         // TODO: Handle error
         const str = self.currentStr();
         const token = Token{
+            .line = self.line,
             .tokenType = tokenType,
             .lexeme = str,
             .literal = switch (tokenType) {
@@ -182,7 +184,12 @@ pub const Scanner = struct {
 
     pub fn scanToken(self: *Scanner) MatchResult {
         if (self.isEnd()) {
-            return MatchResult{ .token = Token{ .tokenType = TokenType.EOF, .lexeme = "", .literal = null } };
+            return MatchResult{ .token = Token{
+                .tokenType = TokenType.EOF,
+                .lexeme = "",
+                .literal = null,
+                .line = self.line,
+            } };
         }
 
         const char = self.source[self.current_end];
