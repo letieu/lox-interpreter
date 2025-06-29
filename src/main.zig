@@ -59,5 +59,5 @@ pub fn main() !void {
     }
 
     const result = evaluate.evaluate(&expr);
-    try std.io.getStdOut().writer().print("hihi {s}", .{result});
+    try std.io.getStdOut().writer().print("{s}", .{result});
 }
