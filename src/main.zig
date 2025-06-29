@@ -2,15 +2,18 @@ const std = @import("std");
 const scan = @import("scan.zig");
 const parse = @import("parse.zig");
 const astPrint = @import("ast-print.zig");
+const evaluate = @import("evaluate.zig");
 
 const Command = enum {
     Tokenize,
     Parse,
+    Evaluate,
 };
 
 const commands = std.StaticStringMap(Command).initComptime(.{
     .{ "tokenize", .Tokenize },
     .{ "parse", .Parse },
+    .{ "evaluate", .Parse },
 });
 
 pub fn main() !void {
@@ -49,5 +52,12 @@ pub fn main() !void {
     };
 
     const printer = astPrint.AstPrinter.init();
-    try printer.printExpression(&expr);
+
+    if (command == Command.Parse) {
+        try printer.printExpression(&expr);
+        return;
+    }
+
+    const result = evaluate.evaluate(&expr);
+    try std.io.getStdOut().writer().print("{s}", .{result});
 }
