@@ -4,6 +4,7 @@ const std = @import("std");
 pub fn evaluate(expr: *const parser.Expr) []const u8 {
     switch (expr.*) {
         .Literal => |literal| return evaluateLiteral(literal),
+        .Grouping => |grouping| return evaluateGrouping(grouping),
         else => {
             return &[_]u8{};
         },
@@ -20,4 +21,8 @@ fn evaluateLiteral(expr: parser.LiteralExpr) []const u8 {
             return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{expr.NUMBER}) catch "0.0";
         },
     }
+}
+
+fn evaluateGrouping(grouping: parser.GroupingExpr) []const u8 {
+    return evaluate(grouping.expression);
 }
