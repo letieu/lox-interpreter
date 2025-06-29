@@ -101,6 +101,16 @@ fn evaluateBinary(binary: parser.BinaryExpr) EvalError!EvalResult {
 
             return EvalResult{ .boolean = false };
         },
+        .BANG_EQUAL => {
+            if (left == .number and right == .number) {
+                return EvalResult{ .boolean = left.number != right.number };
+            }
+            if (left == .string and right == .string) {
+                return EvalResult{ .boolean = !std.mem.eql(u8, left.string, right.string) };
+            }
+
+            return EvalResult{ .boolean = true };
+        },
         else => return EvalError.Invalid,
     }
 
