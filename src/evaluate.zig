@@ -2,7 +2,14 @@ const parser = @import("parse.zig");
 const std = @import("std");
 const TokenType = @import("scan.zig").TokenType;
 
-const EvalResult = union(enum) {
+const EvalResultType = enum {
+    string,
+    number,
+    boolean,
+    nil,
+};
+
+const EvalResult = union(EvalResultType) {
     string: []const u8,
     number: f64,
     boolean: bool,
@@ -63,12 +70,27 @@ fn evaluateBinary(binary: parser.BinaryExpr) EvalError!EvalResult {
     const left = try evaluate(binary.left);
     const right = try evaluate(binary.right);
 
-    switch (binary.operator.tokenType) {
-        .PLUS => return EvalResult{ .number = left.number + right.number },
-        .MINUS => return EvalResult{ .number = left.number - right.number },
-        .STAR => return EvalResult{ .number = left.number * right.number },
-        .SLASH => return EvalResult{ .number = left.number / right.number },
-        else => return EvalError.Invalid,
+    if (left == .number and right == .number) {
+        switch (binary.operator.tokenType) {
+            .PLUS => return EvalResult{ .number = left.number + right.number },
+            .MINUS => return EvalResult{ .number = left.number - right.number },
+            .STAR => return EvalResult{ .number = left.number * right.number },
+            .SLASH => return EvalResult{ .number = left.number / right.number },
+            else => return EvalError.Invalid,
+        }
+    }
+
+    if (left == .string and right == .string) {
+        switch (binary.operator.tokenType) {
+            .PLUS => {
+                const allocator = std.heap.page_allocator;
+                const str = std.mem.concat(allocator, u8, &.{ left.string, right.string }) catch {
+                    return EvalError.AllocationError;
+                };
+                return EvalResult{ .string = str };
+            },
+            else => return EvalError.Invalid,
+        }
     }
 
     return EvalError.Invalid;
