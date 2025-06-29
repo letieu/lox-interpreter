@@ -53,15 +53,11 @@ pub const AstPrinter = struct {
     }
 
     pub fn printBinary(self: *const AstPrinter, expr: parser.BinaryExpr) PrintError!void {
-        try self.write("Binary\n", .{});
-
-        try self.write("Left:\n", .{});
+        try self.write("({s} ", .{expr.operator.lexeme});
         try self.printExpression(expr.left);
-
-        try self.write("Operator: {s}\n", .{expr.operator.lexeme});
-
-        try self.write("Right:\n", .{});
+        try self.write(" ", .{});
         try self.printExpression(expr.right);
+        try self.write(")", .{});
     }
 
     pub fn printUnary(self: *const AstPrinter, expr: parser.UnaryExpr) PrintError!void {
