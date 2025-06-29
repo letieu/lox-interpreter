@@ -19,7 +19,7 @@ pub fn evaluate(expr: *const parser.Expr) EvalError!EvalResult {
         .Literal => |literal| return try evaluateLiteral(literal),
         .Grouping => |grouping| return try evaluateGrouping(grouping),
         .Unary => |unary| return try evaluateUnary(unary),
-        else => return EvalResult.nil,
+        .Binary => |binary| return try evaluateBinary(binary),
     }
 }
 
@@ -54,6 +54,21 @@ fn evaluateUnary(unary: parser.UnaryExpr) EvalError!EvalResult {
             .nil => return EvalResult{ .boolean = true },
             else => return EvalError.Invalid,
         }
+    }
+
+    return EvalError.Invalid;
+}
+
+fn evaluateBinary(binary: parser.BinaryExpr) EvalError!EvalResult {
+    const left = try evaluate(binary.left);
+    const right = try evaluate(binary.right);
+
+    switch (binary.operator.tokenType) {
+        .PLUS => return EvalResult{ .number = left.number + right.number },
+        .MINUS => return EvalResult{ .number = left.number - right.number },
+        .STAR => return EvalResult{ .number = left.number * right.number },
+        .SLASH => return EvalResult{ .number = left.number / right.number },
+        else => return EvalError.Invalid,
     }
 
     return EvalError.Invalid;
