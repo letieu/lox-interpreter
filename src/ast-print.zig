@@ -65,11 +65,8 @@ pub const AstPrinter = struct {
     }
 
     pub fn printUnary(self: *const AstPrinter, expr: parser.UnaryExpr) PrintError!void {
-        try self.write("Unary\n", .{});
-
-        try self.write("Operator: {s}\n", .{expr.operator.lexeme});
-
-        try self.write("Right:\n", .{});
+        try self.write("({s} ", .{expr.operator.lexeme});
         try self.printExpression(expr.right);
+        try self.write(")", .{});
     }
 };
