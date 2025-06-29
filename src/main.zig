@@ -46,5 +46,6 @@ pub fn main() !void {
     var parser = try parse.Parser.init(tokens, alloc);
     const expr = parser.parseExpression();
 
-    astPrint.printExpr(&expr);
+    const printer = astPrint.AstPrinter.init();
+    try printer.printExpression(&expr);
 }

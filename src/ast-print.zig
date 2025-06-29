@@ -1,48 +1,75 @@
 const parser = @import("parse.zig");
 const std = @import("std");
 
-pub fn printExpr(expr: *const parser.Expr) void {
-    switch (expr.*) {
-        .Binary => |group| printBinary(group),
-        .Unary => |group| printUnary(group),
-        .Literal => |literal| printLiteral(literal),
-        .Grouping => |group| printGrouping(group),
+const PrintError = error{
+    WriteFail,
+};
+
+const WriterType = @TypeOf(std.io.getStdOut().writer());
+
+pub const AstPrinter = struct {
+    writer: WriterType,
+
+    pub fn init() AstPrinter {
+        const writer = std.io.getStdOut().writer();
+        return AstPrinter{
+            .writer = writer,
+        };
     }
-}
 
-pub fn printGrouping(expr: parser.GroupingExpr) void {
-    std.debug.print("( group ", .{});
-    printExpr(expr.expression);
-    std.debug.print(" )", .{});
-}
-
-pub fn printLiteral(expr: parser.LiteralExpr) void {
-    switch (expr) {
-        .FALSE => std.debug.print("FALSE", .{}),
-        .TRUE => std.debug.print("TRUE", .{}),
-        .NIL => std.debug.print("NIL", .{}),
-        .NUMBER => |num| std.debug.print("{d}", .{num}),
-        .STRING => |str| std.debug.print("{s}", .{str}),
+    fn write(self: AstPrinter, comptime format: []const u8, args: anytype) PrintError!void {
+        self.writer.print(format, args) catch return PrintError.WriteFail;
     }
-}
 
-pub fn printBinary(expr: parser.BinaryExpr) void {
-    std.debug.print("Binary\n", .{});
+    pub fn printExpression(self: *const AstPrinter, expr: *const parser.Expr) PrintError!void {
+        switch (expr.*) {
+            .Binary => |group| try self.printBinary(group),
+            .Unary => |group| try self.printUnary(group),
+            .Literal => |literal| try self.printLiteral(literal),
+            .Grouping => |group| try self.printGrouping(group),
+        }
+    }
 
-    std.debug.print("Left:\n", .{});
-    printExpr(expr.left);
+    pub fn printGrouping(self: *const AstPrinter, expr: parser.GroupingExpr) PrintError!void {
+        try self.write("(group ", .{});
+        try self.printExpression(expr.expression);
+        try self.write(")", .{});
+    }
 
-    std.debug.print("Operator: {s}\n", .{expr.operator.lexeme});
+    pub fn printLiteral(self: *const AstPrinter, expr: parser.LiteralExpr) PrintError!void {
+        switch (expr) {
+            .FALSE => try self.write("false", .{}),
+            .TRUE => try self.write("true", .{}),
+            .NIL => try self.write("nil", .{}),
+            .NUMBER => |num| {
+                if (@floor(num) == num) {
+                    try self.write("{d:.1}", .{num});
+                } else {
+                    try self.write("{d}", .{num});
+                }
+            },
+            .STRING => |str| try self.write("{s}", .{str}),
+        }
+    }
 
-    std.debug.print("Right:\n", .{});
-    printExpr(expr.right);
-}
+    pub fn printBinary(self: *const AstPrinter, expr: parser.BinaryExpr) PrintError!void {
+        try self.write("Binary\n", .{});
 
-pub fn printUnary(expr: parser.UnaryExpr) void {
-    std.debug.print("Unary\n", .{});
+        try self.write("Left:\n", .{});
+        try self.printExpression(expr.left);
 
-    std.debug.print("Operator: {s}\n", .{expr.operator.lexeme});
+        try self.write("Operator: {s}\n", .{expr.operator.lexeme});
 
-    std.debug.print("Right:\n", .{});
-    printExpr(expr.right);
-}
+        try self.write("Right:\n", .{});
+        try self.printExpression(expr.right);
+    }
+
+    pub fn printUnary(self: *const AstPrinter, expr: parser.UnaryExpr) PrintError!void {
+        try self.write("Unary\n", .{});
+
+        try self.write("Operator: {s}\n", .{expr.operator.lexeme});
+
+        try self.write("Right:\n", .{});
+        try self.printExpression(expr.right);
+    }
+};
