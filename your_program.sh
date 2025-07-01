@@ -21,4 +21,5 @@ set -e # Exit early if any commands fail
 #
 # - Edit this to change how your program runs locally
 # - Edit .codecrafters/run.sh to change how your program runs remotely
-exec zig-out/bin/main "$@"
+# exec zig-out/bin/main "$@"
+exec /home/tieu/code/learn/codecrafters-interpreter-zig/zig-out/bin/main "$@"
