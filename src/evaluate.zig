@@ -19,14 +19,15 @@ const EvalResult = union(EvalResultType) {
 pub const EvalError = error{
     AllocationError,
     Invalid,
+    NotANumber,
 };
 
-pub fn evaluate(expr: *const parser.Expr) EvalError!EvalResult {
+pub fn evaluate(expr: *const parser.Expr, errorLine: *usize) EvalError!EvalResult {
     switch (expr.*) {
         .Literal => |literal| return try evaluateLiteral(literal),
-        .Grouping => |grouping| return try evaluateGrouping(grouping),
-        .Unary => |unary| return try evaluateUnary(unary),
-        .Binary => |binary| return try evaluateBinary(binary),
+        .Grouping => |grouping| return try evaluateGrouping(grouping, errorLine),
+        .Unary => |unary| return try evaluateUnary(unary, errorLine),
+        .Binary => |binary| return try evaluateBinary(binary, errorLine),
     }
 }
 
@@ -40,17 +41,20 @@ fn evaluateLiteral(expr: parser.LiteralExpr) EvalError!EvalResult {
     }
 }
 
-fn evaluateGrouping(grouping: parser.GroupingExpr) EvalError!EvalResult {
-    return evaluate(grouping.expression);
+fn evaluateGrouping(grouping: parser.GroupingExpr, errorLine: *usize) EvalError!EvalResult {
+    return evaluate(grouping.expression, errorLine);
 }
 
-fn evaluateUnary(unary: parser.UnaryExpr) EvalError!EvalResult {
-    const right = try evaluate(unary.right);
+fn evaluateUnary(unary: parser.UnaryExpr, errorLine: *usize) EvalError!EvalResult {
+    const right = try evaluate(unary.right, errorLine);
 
     if (unary.operator.tokenType == TokenType.MINUS) {
         switch (right) {
             .number => return EvalResult{ .number = -right.number },
-            else => return EvalError.Invalid,
+            else => {
+                errorLine.* = unary.operator.line;
+                return EvalError.NotANumber;
+            },
         }
     }
 
@@ -66,9 +70,9 @@ fn evaluateUnary(unary: parser.UnaryExpr) EvalError!EvalResult {
     return EvalError.Invalid;
 }
 
-fn evaluateBinary(binary: parser.BinaryExpr) EvalError!EvalResult {
-    const left = try evaluate(binary.left);
-    const right = try evaluate(binary.right);
+fn evaluateBinary(binary: parser.BinaryExpr, errorLine: *usize) EvalError!EvalResult {
+    const left = try evaluate(binary.left, errorLine);
+    const right = try evaluate(binary.right, errorLine);
 
     switch (binary.operator.tokenType) {
         .PLUS => {

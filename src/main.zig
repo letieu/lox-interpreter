@@ -58,9 +58,15 @@ pub fn main() !void {
         return;
     }
 
-    const result = evaluate.evaluate(&expr) catch {
-        try std.io.getStdOut().writer().print("Runtime error", .{});
-        std.process.exit(65);
+    var errorLine: usize = 0;
+    const result = evaluate.evaluate(&expr, &errorLine) catch |e| {
+        switch (e) {
+            error.AllocationError => try std.io.getStdOut().writer().print("Allocation Error.\n", .{}),
+            error.NotANumber => try std.io.getStdOut().writer().print("Operand must be a number.\n", .{}),
+            error.Invalid => try std.io.getStdOut().writer().print("Invalid.\n", .{}),
+        }
+        try std.io.getStdOut().writer().print("[line {d}]", .{errorLine});
+        std.process.exit(70);
     };
 
     switch (result) {
