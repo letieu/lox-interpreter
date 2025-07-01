@@ -60,12 +60,13 @@ pub fn main() !void {
 
     var errorLine: usize = 0;
     const result = evaluate.evaluate(&expr, &errorLine) catch |e| {
+        const writer = std.io.getStdErr().writer();
         switch (e) {
-            error.AllocationError => try std.io.getStdOut().writer().print("Allocation Error.\n", .{}),
-            error.NotANumber => try std.io.getStdOut().writer().print("Operand must be a number.\n", .{}),
-            error.Invalid => try std.io.getStdOut().writer().print("Invalid.\n", .{}),
+            error.AllocationError => try writer.print("Allocation Error.\n", .{}),
+            error.NotANumber => try writer.print("Operand must be a number.\n", .{}),
+            error.Invalid => try writer.print("Invalid.\n", .{}),
         }
-        try std.io.getStdOut().writer().print("[line {d}]", .{errorLine});
+        try writer.print("[line {d}]", .{errorLine});
         std.process.exit(70);
     };
 

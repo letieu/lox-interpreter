@@ -1,4 +1,5 @@
 const parser = @import("parse.zig");
+const scan = @import("scan.zig");
 const std = @import("std");
 const TokenType = @import("scan.zig").TokenType;
 
@@ -76,9 +77,6 @@ fn evaluateBinary(binary: parser.BinaryExpr, errorLine: *usize) EvalError!EvalRe
 
     switch (binary.operator.tokenType) {
         .PLUS => {
-            if (left == .number and right == .number) {
-                return EvalResult{ .number = left.number + right.number };
-            }
             if (left == .string and right == .string) {
                 const allocator = std.heap.page_allocator;
                 const str = std.mem.concat(allocator, u8, &.{ left.string, right.string }) catch {
@@ -86,37 +84,67 @@ fn evaluateBinary(binary: parser.BinaryExpr, errorLine: *usize) EvalError!EvalRe
                 };
                 return EvalResult{ .string = str };
             }
-            return EvalError.Invalid;
+
+            try validateNumberOperand(left, right, errorLine, binary.operator);
+            return EvalResult{ .number = left.number + right.number };
         },
-        .MINUS => return EvalResult{ .number = left.number - right.number },
-        .STAR => return EvalResult{ .number = left.number * right.number },
-        .SLASH => return EvalResult{ .number = left.number / right.number },
-        .GREATER => return EvalResult{ .boolean = left.number > right.number },
-        .GREATER_EQUAL => return EvalResult{ .boolean = left.number >= right.number },
-        .LESS => return EvalResult{ .boolean = left.number < right.number },
-        .LESS_EQUAL => return EvalResult{ .boolean = left.number <= right.number },
+        .MINUS => {
+            try validateNumberOperand(left, right, errorLine, binary.operator);
+            return EvalResult{ .number = left.number - right.number };
+        },
+        .STAR => {
+            try validateNumberOperand(left, right, errorLine, binary.operator);
+            return EvalResult{ .number = left.number * right.number };
+        },
+        .SLASH => {
+            try validateNumberOperand(left, right, errorLine, binary.operator);
+            return EvalResult{ .number = left.number / right.number };
+        },
+        .GREATER => {
+            try validateNumberOperand(left, right, errorLine, binary.operator);
+            return EvalResult{ .boolean = left.number > right.number };
+        },
+        .GREATER_EQUAL => {
+            try validateNumberOperand(left, right, errorLine, binary.operator);
+            return EvalResult{ .boolean = left.number >= right.number };
+        },
+        .LESS => {
+            try validateNumberOperand(left, right, errorLine, binary.operator);
+            return EvalResult{ .boolean = left.number < right.number };
+        },
+        .LESS_EQUAL => {
+            try validateNumberOperand(left, right, errorLine, binary.operator);
+            return EvalResult{ .boolean = left.number <= right.number };
+        },
         .EQUAL_EQUAL => {
-            if (left == .number and right == .number) {
-                return EvalResult{ .boolean = left.number == right.number };
-            }
             if (left == .string and right == .string) {
                 return EvalResult{ .boolean = std.mem.eql(u8, left.string, right.string) };
             }
 
-            return EvalResult{ .boolean = false };
+            validateNumberOperand(left, right, errorLine, binary.operator) catch {
+                return EvalResult{ .boolean = false };
+            };
+            return EvalResult{ .boolean = left.number == right.number };
         },
         .BANG_EQUAL => {
-            if (left == .number and right == .number) {
-                return EvalResult{ .boolean = left.number != right.number };
-            }
             if (left == .string and right == .string) {
                 return EvalResult{ .boolean = !std.mem.eql(u8, left.string, right.string) };
             }
 
-            return EvalResult{ .boolean = true };
+            validateNumberOperand(left, right, errorLine, binary.operator) catch {
+                return EvalResult{ .boolean = true };
+            };
+            return EvalResult{ .boolean = left.number != right.number };
         },
         else => return EvalError.Invalid,
     }
 
     return EvalError.Invalid;
+}
+
+fn validateNumberOperand(left: EvalResult, right: EvalResult, errorLine: *usize, token: scan.Token) EvalError!void {
+    if (left != .number or right != .number) {
+        errorLine.* = token.line;
+        return EvalError.NotANumber;
+    }
 }
