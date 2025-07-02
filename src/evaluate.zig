@@ -121,6 +121,10 @@ fn evaluateBinary(binary: parser.BinaryExpr, errorLine: *usize) EvalError!EvalRe
                 return EvalResult{ .boolean = std.mem.eql(u8, left.string, right.string) };
             }
 
+            if (left == .boolean and right == .boolean) {
+                return EvalResult{ .boolean = left.boolean == right.boolean };
+            }
+
             validateNumberOperand(left, right, errorLine, binary.operator) catch {
                 return EvalResult{ .boolean = false };
             };
@@ -129,6 +133,10 @@ fn evaluateBinary(binary: parser.BinaryExpr, errorLine: *usize) EvalError!EvalRe
         .BANG_EQUAL => {
             if (left == .string and right == .string) {
                 return EvalResult{ .boolean = !std.mem.eql(u8, left.string, right.string) };
+            }
+
+            if (left == .boolean and right == .boolean) {
+                return EvalResult{ .boolean = left.boolean != right.boolean };
             }
 
             validateNumberOperand(left, right, errorLine, binary.operator) catch {

@@ -216,7 +216,7 @@ pub const Scanner = struct {
             '-' => return self.matchToken(TokenType.MINUS),
             '*' => return self.matchToken(TokenType.STAR),
             '"' => {
-                while (self.peek() != '"' and self.peek() != '\n' and !self.isEnd()) {
+                while (self.peek() != '"' and !self.isEnd()) {
                     self.advance();
                 }
 

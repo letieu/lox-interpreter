@@ -8,13 +8,34 @@ const Command = enum {
     Tokenize,
     Parse,
     Evaluate,
+    Run,
 };
 
 const commands = std.StaticStringMap(Command).initComptime(.{
     .{ "tokenize", .Tokenize },
     .{ "parse", .Parse },
     .{ "evaluate", .Evaluate },
+    .{ "run", .Run },
 });
+
+pub fn printAst(statements: []parse.Statement) !void {
+    const printer = astPrint.AstPrinter.init();
+
+    for (statements) |statement| {
+        try printer.printStatement(&statement);
+    }
+    return;
+}
+
+pub fn printEvalError(e: evaluate.EvalError, errorLine: *const usize) !void {
+    const writer = std.io.getStdErr().writer();
+    switch (e) {
+        error.AllocationError => try writer.print("Allocation Error.\n", .{}),
+        error.NotANumber => try writer.print("Operand must be a number.\n", .{}),
+        error.Invalid => try writer.print("Invalid.\n", .{}),
+    }
+    try writer.print("[line {d}]", .{errorLine.*});
+}
 
 pub fn main() !void {
     const args = try std.process.argsAlloc(std.heap.page_allocator);
@@ -41,39 +62,42 @@ pub fn main() !void {
     const tokens = scan.scanTokens(alloc, file_contents, command == Command.Tokenize) catch {
         std.process.exit(65);
     };
-
     if (command == Command.Tokenize) {
         return;
     }
 
     var parser = try parse.Parser.init(tokens, alloc);
-    const expr = parser.parse() catch {
+    const statements = parser.parse() catch {
         std.process.exit(65);
     };
-
-    const printer = astPrint.AstPrinter.init();
-
     if (command == Command.Parse) {
-        try printer.printExpression(&expr);
+        try printAst(statements);
         return;
     }
 
-    var errorLine: usize = 0;
-    const result = evaluate.evaluate(&expr, &errorLine) catch |e| {
-        const writer = std.io.getStdErr().writer();
-        switch (e) {
-            error.AllocationError => try writer.print("Allocation Error.\n", .{}),
-            error.NotANumber => try writer.print("Operand must be a number.\n", .{}),
-            error.Invalid => try writer.print("Invalid.\n", .{}),
-        }
-        try writer.print("[line {d}]", .{errorLine});
-        std.process.exit(70);
-    };
+    for (statements) |stmt| {
+        var errorLine: usize = 0;
+        const expr = switch (stmt) {
+            .Print => stmt.Print.expr,
+            .Expression => stmt.Expression.expr,
+        };
+        const result = evaluate.evaluate(&expr, &errorLine) catch |e| {
+            try printEvalError(e, &errorLine);
+            std.process.exit(70);
+            return;
+        };
 
-    switch (result) {
-        .boolean => try std.io.getStdOut().writer().print("{?}", .{result.boolean}),
-        .number => try std.io.getStdOut().writer().print("{d}", .{result.number}),
-        .string => try std.io.getStdOut().writer().print("{s}", .{result.string}),
-        .nil => try std.io.getStdOut().writer().print("nil", .{}),
+        if (stmt == .Print) {
+            switch (result) {
+                .boolean => try std.io.getStdOut().writer().print("{?}", .{result.boolean}),
+                .number => try std.io.getStdOut().writer().print("{d}", .{result.number}),
+                .string => try std.io.getStdOut().writer().print("{s}", .{result.string}),
+                .nil => try std.io.getStdOut().writer().print("nil", .{}),
+            }
+
+            try std.io.getStdOut().writer().print("\n", .{});
+        }
     }
+
+    return;
 }

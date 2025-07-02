@@ -2,6 +2,10 @@ const std = @import("std");
 
 const scan = @import("scan.zig");
 
+// program        → statement* EOF ;
+// statement      → exprStmt | printStmt ;
+// exprStmt       → expression ";";
+// printStmt      → "print" expression ";" ;
 // expression     → equality ;
 // equality       → comparison ( ( "!=" | "==" ) comparison )* ;
 // comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
@@ -11,6 +15,12 @@ const scan = @import("scan.zig");
 //                | primary ;
 // primary        → NUMBER | STRING | "true" | "false" | "nil"
 //                | "(" expression ")" ;
+
+pub const Statement = union(enum) { Print: PrintStatement, Expression: ExpressionStatement };
+
+pub const PrintStatement = struct { expr: Expr };
+
+pub const ExpressionStatement = struct { expr: Expr };
 
 pub const Expr = union(enum) {
     Literal: LiteralExpr,
@@ -81,21 +91,69 @@ pub const Parser = struct {
         self.errors.deinit();
     }
 
-    pub fn parse(self: *Parser) !Expr {
-        const expr = self.parseExpression() orelse {
-            return ParseError.SyntaxError;
-        };
+    pub fn parse(self: *Parser) ![]Statement {
+        var statements = std.ArrayList(Statement).init(self.alloc);
+        while (!self.isAtEnd()) {
+            const statement = self.parseStatement() orelse {
+                return ParseError.SyntaxError;
+            };
+            statements.append(statement) catch {
+                return ParseError.AllocationError;
+            };
+        }
+
         if (self.errors.items.len > 0) {
             return ParseError.SyntaxError;
         }
-        return expr;
+
+        return statements.toOwnedSlice();
     }
 
     fn reportError(self: *Parser, token: scan.Token, message: []const u8) void {
         self.errors.append(.{ .message = message, .token = token }) catch unreachable;
-        std.io.getStdErr().writer().print("[line {}] Error at '{s}': {s}", .{ token.line, token.lexeme, message }) catch {
+        std.io.getStdErr().writer().print("[line {}] Error at '{s}': {s}\n", .{ token.line, token.lexeme, message }) catch {
             std.debug.print("Print error failed", .{});
         };
+    }
+
+    fn parseStatement(self: *Parser) ?Statement {
+        // statement      →  printStmt | exprStmt ;
+        if (self.is(scan.TokenType.PRINT)) {
+            return self.parsePrintStatement();
+        }
+
+        return self.parseExpressionStatement();
+    }
+
+    fn parsePrintStatement(self: *Parser) ?Statement {
+        const printToken = self.currentToken();
+        self.advance();
+
+        const expr = self.parseExpression() orelse {
+            self.reportError(printToken, "Invalid print");
+            return null;
+        };
+
+        if (!self.is(scan.TokenType.SEMICOLON)) {
+            self.reportError(self.currentToken(), "Expected ';'");
+            return null;
+        }
+        self.advance();
+
+        return Statement{ .Print = PrintStatement{ .expr = expr } };
+    }
+
+    fn parseExpressionStatement(self: *Parser) ?Statement {
+        const expr = self.parseExpression() orelse {
+            self.reportError(self.currentToken(), "Invalid expression statement");
+            return null;
+        };
+        if (!self.is(scan.TokenType.SEMICOLON)) {
+            self.reportError(self.currentToken(), "Expected ';'");
+            return null;
+        }
+        self.advance();
+        return Statement{ .Expression = ExpressionStatement{ .expr = expr } };
     }
 
     fn parseExpression(self: *Parser) ?Expr {

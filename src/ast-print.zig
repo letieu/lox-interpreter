@@ -21,6 +21,20 @@ pub const AstPrinter = struct {
         self.writer.print(format, args) catch return PrintError.WriteFail;
     }
 
+    pub fn printStatement(self: *const AstPrinter, stmt: *const parser.Statement) PrintError!void {
+        switch (stmt.*) {
+            .Expression => |exprStmt| try self.printExpression(&exprStmt.expr),
+            .Print => |printStmt| try self.printPrint(&printStmt.expr),
+        }
+        try self.write("\n", .{});
+    }
+
+    pub fn printPrint(self: *const AstPrinter, expr: *const parser.Expr) PrintError!void {
+        try self.write("(print ", .{});
+        try self.printExpression(expr);
+        try self.write(")", .{});
+    }
+
     pub fn printExpression(self: *const AstPrinter, expr: *const parser.Expr) PrintError!void {
         switch (expr.*) {
             .Binary => |group| try self.printBinary(group),
