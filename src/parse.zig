@@ -3,8 +3,9 @@ const std = @import("std");
 const scan = @import("scan.zig");
 
 // program        → statement* EOF ;
-// statement      → exprStmt | printStmt ;
+// statement      → exprStmt | varDecl | printStmt ;
 // exprStmt       → expression ";";
+// varDecl        → "var" IDENTIFIER ( "=" expression)? ";" ;
 // printStmt      → "print" expression ";" ;
 // expression     → equality ;
 // equality       → comparison ( ( "!=" | "==" ) comparison )* ;
@@ -16,11 +17,17 @@ const scan = @import("scan.zig");
 // primary        → NUMBER | STRING | "true" | "false" | "nil"
 //                | "(" expression ")" ;
 
-pub const Statement = union(enum) { Print: PrintStatement, Expression: ExpressionStatement };
+pub const StatementType = enum { Print, Expression, Var };
+pub const Statement = union(StatementType) { Print: PrintStatement, Expression: ExpressionStatement, Var: VarStatement };
 
 pub const PrintStatement = struct { expr: Expr };
 
 pub const ExpressionStatement = struct { expr: Expr };
+
+pub const VarStatement = struct {
+    name: []const u8,
+    initializer: ?Expr,
+};
 
 pub const Expr = union(enum) {
     Literal: LiteralExpr,
@@ -64,125 +71,178 @@ pub const ParseMessage = struct {
     message: []const u8,
 };
 
-pub const ParseError = error{
-    SyntaxError,
-    AllocationError,
+pub const SyntaxError = error{
+    MissingSemicolon,
+    MissingVarInit,
+    MissingVarIdentifier,
+    MissingExpression,
+    MissingRightParen,
+    UnexpectedToken,
 };
+
+pub const ParseError = SyntaxError || error{OutOfMemory};
 
 pub const Parser = struct {
     alloc: std.mem.Allocator,
     tokens: []scan.Token,
     current: usize = 0,
-    errors: std.ArrayList(ParseMessage),
 
-    pub fn init(
-        tokens: []scan.Token,
-        alloc: std.mem.Allocator,
-    ) !Parser {
+    stdOut: std.fs.File,
+    stdErr: std.fs.File,
+
+    errorLine: usize,
+
+    pub fn init(tokens: []scan.Token, alloc: std.mem.Allocator, stdOut: std.fs.File, stdErr: std.fs.File) !Parser {
         return .{
             .tokens = tokens,
             .current = 0,
             .alloc = alloc,
-            .errors = std.ArrayList(ParseMessage).init(alloc),
+            .stdOut = stdOut,
+            .stdErr = stdErr,
+            .errorLine = 0,
         };
-    }
-
-    pub fn deinit(self: *Parser) void {
-        self.errors.deinit();
     }
 
     pub fn parse(self: *Parser) ![]Statement {
         var statements = std.ArrayList(Statement).init(self.alloc);
+        var err: ?ParseError = null;
+
         while (!self.isAtEnd()) {
-            const statement = self.parseStatement() orelse {
-                return ParseError.SyntaxError;
+            const statement = self.parseStatement() catch |e| {
+                err = e;
+                try self.printError(e);
+                self.synchronize();
+                continue;
             };
-            statements.append(statement) catch {
-                return ParseError.AllocationError;
-            };
+
+            try statements.append(statement);
         }
 
-        if (self.errors.items.len > 0) {
-            return ParseError.SyntaxError;
-        }
-
+        if (err != null) return err.?;
         return statements.toOwnedSlice();
     }
 
-    fn reportError(self: *Parser, token: scan.Token, message: []const u8) void {
-        self.errors.append(.{ .message = message, .token = token }) catch unreachable;
-        std.io.getStdErr().writer().print("[line {}] Error at '{s}': {s}\n", .{ token.line, token.lexeme, message }) catch {
-            std.debug.print("Print error failed", .{});
-        };
+    pub fn printError(self: *Parser, e: ParseError) !void {
+        const prevToken = self.previousToken();
+        const current = self.currentToken();
+        const writer = self.stdErr.writer();
+
+        switch (e) {
+            error.MissingSemicolon => try writer.print("[line {d}] Error at '{s}': Expected ';'.\n", .{ prevToken.line, prevToken.lexeme }),
+            error.MissingVarIdentifier => try writer.print("[line {d}] Error at '{s}': Expected var identifier.\n", .{ prevToken.line, prevToken.lexeme }),
+            error.MissingVarInit => try writer.print("[line {d}] Error at '{s}': Expected var initializer.\n", .{ prevToken.line, prevToken.lexeme }),
+            error.MissingExpression => try writer.print("[line {d}] Error at '{s}': Miss expression.\n", .{ prevToken.line, prevToken.lexeme }),
+            error.MissingRightParen => try writer.print("[line {d}] Error at '{s}': Miss ')'.\n", .{ prevToken.line, prevToken.lexeme }),
+            error.OutOfMemory => try writer.print("Out of memory.\n", .{}),
+            error.UnexpectedToken => try writer.print("[Line {d}] Unexpected token '{s}'", .{ current.line, current.lexeme }),
+        }
     }
 
-    fn parseStatement(self: *Parser) ?Statement {
+    fn synchronize(self: *Parser) void {
+        while (!self.isAtEnd()) {
+            const token = self.currentToken();
+            switch (token.tokenType) {
+                .SEMICOLON => {
+                    self.advance();
+                    return;
+                },
+                else => {
+                    self.advance();
+                },
+            }
+        }
+    }
+
+    fn parseStatement(self: *Parser) ParseError!Statement {
         // statement      →  printStmt | exprStmt ;
         if (self.is(scan.TokenType.PRINT)) {
             return self.parsePrintStatement();
         }
 
+        if (self.is(scan.TokenType.VAR)) {
+            return self.parseVarStatement();
+        }
+
         return self.parseExpressionStatement();
     }
 
-    fn parsePrintStatement(self: *Parser) ?Statement {
-        const printToken = self.currentToken();
+    fn parsePrintStatement(self: *Parser) ParseError!Statement {
         self.advance();
-
-        const expr = self.parseExpression() orelse {
-            self.reportError(printToken, "Invalid print");
-            return null;
-        };
+        const expr = try self.parseExpression();
 
         if (!self.is(scan.TokenType.SEMICOLON)) {
-            self.reportError(self.currentToken(), "Expected ';'");
-            return null;
+            return ParseError.MissingSemicolon;
         }
         self.advance();
 
         return Statement{ .Print = PrintStatement{ .expr = expr } };
     }
 
-    fn parseExpressionStatement(self: *Parser) ?Statement {
-        const expr = self.parseExpression() orelse {
-            self.reportError(self.currentToken(), "Invalid expression statement");
-            return null;
-        };
+    fn parseVarStatement(self: *Parser) ParseError!Statement {
+        self.advance();
+
+        if (!self.is(scan.TokenType.IDENTIFIER)) {
+            return ParseError.MissingVarIdentifier;
+        }
+
+        const varIdentifier = self.currentToken();
+        self.advance();
+
+        var sttm = Statement{ .Var = VarStatement{ .name = varIdentifier.lexeme, .initializer = null } };
+
+        if (self.is(scan.TokenType.EQUAL)) {
+            self.advance();
+            sttm.Var.initializer = self.parseExpression() catch {
+                return error.MissingVarInit;
+            };
+        }
+
         if (!self.is(scan.TokenType.SEMICOLON)) {
-            self.reportError(self.currentToken(), "Expected ';'");
-            return null;
+            return ParseError.MissingSemicolon;
+        }
+        self.advance();
+
+        return sttm;
+    }
+
+    fn parseExpressionStatement(self: *Parser) ParseError!Statement {
+        const expr = try self.parseExpression();
+
+        if (!self.is(scan.TokenType.SEMICOLON)) {
+            return ParseError.MissingSemicolon;
         }
         self.advance();
         return Statement{ .Expression = ExpressionStatement{ .expr = expr } };
     }
 
-    fn parseExpression(self: *Parser) ?Expr {
+    fn parseExpression(self: *Parser) ParseError!Expr {
         // expression     → equality ;
         return self.parseEquality();
     }
 
-    fn parseEquality(self: *Parser) ?Expr {
+    fn parseEquality(self: *Parser) ParseError!Expr {
         // equality       → comparison ( ( "!=" | "==" ) comparison )* ;
-        var expr = self.parseComparison() orelse return null;
+        var expr = try self.parseComparison();
 
         while (self.is(scan.TokenType.BANG_EQUAL) or self.is(scan.TokenType.EQUAL_EQUAL)) {
             const operator = self.currentToken();
             self.advance();
 
-            const left = self.alloc.create(Expr) catch unreachable;
-            const right = self.alloc.create(Expr) catch unreachable;
+            const left = try self.alloc.create(Expr);
+            const right = try self.alloc.create(Expr);
 
             left.* = expr;
-            right.* = self.parseComparison() orelse return null;
+            right.* = try self.parseComparison();
 
             expr = Expr{ .Binary = BinaryExpr{ .left = left, .operator = operator, .right = right } };
         }
         return expr;
     }
 
-    fn parseComparison(self: *Parser) ?Expr {
+    fn parseComparison(self: *Parser) ParseError!Expr {
         // comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
-        var expr = self.parseTerm() orelse return null;
+        var expr = try self.parseTerm();
+
         while (self.is(scan.TokenType.GREATER) or
             self.is(scan.TokenType.GREATER_EQUAL) or
             self.is(scan.TokenType.LESS) or
@@ -191,62 +251,62 @@ pub const Parser = struct {
             const operator = self.currentToken();
             self.advance();
 
-            const left = self.alloc.create(Expr) catch unreachable;
-            const right = self.alloc.create(Expr) catch unreachable;
+            const left = try self.alloc.create(Expr);
+            const right = try self.alloc.create(Expr);
 
             left.* = expr;
-            right.* = self.parseTerm() orelse return null;
+            right.* = try self.parseTerm();
 
             expr = Expr{ .Binary = BinaryExpr{ .left = left, .operator = operator, .right = right } };
         }
         return expr;
     }
 
-    fn parseTerm(self: *Parser) ?Expr {
+    fn parseTerm(self: *Parser) ParseError!Expr {
         // term           → factor ( ( "-" | "+" ) factor )* ;
-        var expr = self.parseFactor() orelse return null;
+        var expr = try self.parseFactor();
 
         while (self.is(scan.TokenType.MINUS) or self.is(scan.TokenType.PLUS)) {
             const operator = self.currentToken();
             self.advance();
 
-            const left = self.alloc.create(Expr) catch unreachable;
-            const right = self.alloc.create(Expr) catch unreachable;
+            const left = try self.alloc.create(Expr);
+            const right = try self.alloc.create(Expr);
 
             left.* = expr;
-            right.* = self.parseFactor() orelse return null;
+            right.* = try self.parseFactor();
 
             expr = Expr{ .Binary = BinaryExpr{ .left = left, .operator = operator, .right = right } };
         }
         return expr;
     }
 
-    fn parseFactor(self: *Parser) ?Expr {
+    fn parseFactor(self: *Parser) ParseError!Expr {
         // factor         → unary ( ( "/" | "*" ) unary )* ;
-        var expr = self.parseUnary() orelse return null;
+        var expr = try self.parseUnary();
         while (self.is(scan.TokenType.STAR) or self.is(scan.TokenType.SLASH)) {
             const operator = self.currentToken();
             self.advance();
 
-            const left = self.alloc.create(Expr) catch unreachable;
-            const right = self.alloc.create(Expr) catch unreachable;
+            const left = try self.alloc.create(Expr);
+            const right = try self.alloc.create(Expr);
 
             left.* = expr;
-            right.* = self.parseUnary() orelse return null;
+            right.* = try self.parseUnary();
 
             expr = Expr{ .Binary = BinaryExpr{ .left = left, .operator = operator, .right = right } };
         }
         return expr;
     }
 
-    fn parseUnary(self: *Parser) ?Expr {
+    fn parseUnary(self: *Parser) ParseError!Expr {
         // unary          → ( "!" | "-" ) unary | primary
         while (self.is(scan.TokenType.BANG) or self.is(scan.TokenType.MINUS)) {
             const operator = self.currentToken();
             self.advance();
 
-            const right = self.alloc.create(Expr) catch unreachable;
-            right.* = self.parseUnary() orelse return null;
+            const right = try self.alloc.create(Expr);
+            right.* = try self.parseUnary();
 
             return Expr{ .Unary = UnaryExpr{ .operator = operator, .right = right } };
         }
@@ -254,7 +314,7 @@ pub const Parser = struct {
         return self.parsePrimary();
     }
 
-    fn parsePrimary(self: *Parser) ?Expr {
+    fn parsePrimary(self: *Parser) ParseError!Expr {
         // primary        → NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" ;
 
         if (self.is(scan.TokenType.TRUE)) {
@@ -287,19 +347,16 @@ pub const Parser = struct {
         if (self.currentToken().tokenType == scan.TokenType.LEFT_PAREN) {
             const expr = self.alloc.create(Expr) catch unreachable;
             self.advance();
-            expr.* = self.parseExpression() orelse return null;
+            expr.* = try self.parseExpression();
             const token = self.currentToken();
             if (token.tokenType != scan.TokenType.RIGHT_PAREN) {
-                self.reportError(token, "Expected ')'.");
-                return null;
+                return ParseError.MissingRightParen;
             }
             self.advance();
             return Expr{ .Grouping = GroupingExpr{ .expression = expr } };
         }
 
-        const token = self.currentToken();
-        self.reportError(token, "Expected expression.");
-        return null;
+        return ParseError.UnexpectedToken;
     }
 
     fn previousToken(self: *Parser) scan.Token {
