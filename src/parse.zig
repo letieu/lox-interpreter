@@ -17,7 +17,8 @@ const Token = scan.Token;
 // unary          → ( "!" | "-" ) unary
 //                | primary ;
 // primary        → NUMBER | STRING | "true" | "false" | "nil"
-//                | "(" expression ")" ;
+//                | "(" expression ")"
+//                | IDENTIFIER;
 
 pub const StatementType = enum { Print, Expression, Var };
 pub const Statement = union(StatementType) { Print: PrintStatement, Expression: ExpressionStatement, Var: VarStatement };
@@ -32,6 +33,7 @@ pub const VarStatement = struct {
 };
 
 pub const Expr = union(enum) {
+    Variable: VariableExpr,
     Literal: LiteralExpr,
     Unary: UnaryExpr,
     Binary: BinaryExpr,
@@ -45,6 +47,11 @@ pub const LiteralType = enum {
     FALSE,
     NIL,
 };
+
+pub const VariableExpr = struct {
+    token: Token,
+};
+
 pub const LiteralExpr = union(LiteralType) {
     NUMBER: f64,
     STRING: []const u8,
@@ -341,6 +348,11 @@ pub const Parser = struct {
             }
             self.advance();
             return Expr{ .Grouping = GroupingExpr{ .expression = expr } };
+        }
+
+        if (self.is(TokenType.IDENTIFIER)) {
+            const token = try self.consume(TokenType.IDENTIFIER);
+            return Expr{ .Variable = VariableExpr{ .token = token } };
         }
 
         return ParseError.UnexpectedToken;

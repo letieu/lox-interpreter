@@ -3,6 +3,7 @@ const scan = @import("scan.zig");
 const parse = @import("parse.zig");
 const astPrint = @import("ast-print.zig");
 const evaluate = @import("evaluate.zig");
+const Interpreter = @import("interpreter.zig").Intepreter;
 
 const Command = enum {
     Tokenize,
@@ -27,16 +28,6 @@ pub fn printAst(statements: []parse.Statement) !void {
     return;
 }
 
-pub fn printEvalError(e: evaluate.EvalError, errorLine: *const usize) !void {
-    const writer = std.io.getStdErr().writer();
-    switch (e) {
-        error.AllocationError => try writer.print("Allocation Error.\n", .{}),
-        error.NotANumber => try writer.print("Operand must be a number.\n", .{}),
-        error.Invalid => try writer.print("Invalid.\n", .{}),
-    }
-    try writer.print("[line {d}]", .{errorLine.*});
-}
-
 pub fn main() !void {
     const args = try std.process.argsAlloc(std.heap.page_allocator);
     defer std.process.argsFree(std.heap.page_allocator, args);
@@ -46,10 +37,13 @@ pub fn main() !void {
         std.process.exit(1);
     }
 
+    const stdOut = std.io.getStdOut();
+    const stdErr = std.io.getStdErr();
+
     const filename = args[2];
     const command = commands.get(args[1]);
     if (command == null) {
-        std.debug.print("Unknown command: {s}\n", .{args[1]});
+        try stdOut.writer().print("Unknown command: {s}\n", .{args[1]});
         std.process.exit(1);
     }
 
@@ -66,7 +60,7 @@ pub fn main() !void {
         return;
     }
 
-    var parser = try parse.Parser.init(tokens, alloc);
+    var parser = try parse.Parser.init(tokens, alloc, stdOut, stdErr);
     const statements = parser.parse() catch {
         std.process.exit(65);
     };
@@ -75,29 +69,8 @@ pub fn main() !void {
         return;
     }
 
-    for (statements) |stmt| {
-        var errorLine: usize = 0;
-        const expr = switch (stmt) {
-            .Print => stmt.Print.expr,
-            .Expression => stmt.Expression.expr,
-        };
-        const result = evaluate.evaluate(&expr, &errorLine) catch |e| {
-            try printEvalError(e, &errorLine);
-            std.process.exit(70);
-            return;
-        };
-
-        if (stmt == .Print) {
-            switch (result) {
-                .boolean => try std.io.getStdOut().writer().print("{?}", .{result.boolean}),
-                .number => try std.io.getStdOut().writer().print("{d}", .{result.number}),
-                .string => try std.io.getStdOut().writer().print("{s}", .{result.string}),
-                .nil => try std.io.getStdOut().writer().print("nil", .{}),
-            }
-
-            try std.io.getStdOut().writer().print("\n", .{});
-        }
-    }
+    var interpreter = Interpreter.init(statements, alloc, stdOut, stdErr);
+    try interpreter.run();
 
     return;
 }

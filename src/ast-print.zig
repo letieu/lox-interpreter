@@ -25,8 +25,18 @@ pub const AstPrinter = struct {
         switch (stmt.*) {
             .Expression => |exprStmt| try self.printExpression(&exprStmt.expr),
             .Print => |printStmt| try self.printPrint(&printStmt.expr),
+            .Var => |varStmt| try self.printVarDeclaration(&varStmt.initializer, varStmt.name),
         }
         try self.write("\n", .{});
+    }
+
+    pub fn printVarDeclaration(self: *const AstPrinter, initializer: *const ?parser.Expr, name: []const u8) PrintError!void {
+        try self.write("(var {s} ", .{name});
+        const maybeExpr = initializer.*;
+        if (maybeExpr != null) {
+            try self.printExpression(&maybeExpr.?);
+        }
+        try self.write(")", .{});
     }
 
     pub fn printPrint(self: *const AstPrinter, expr: *const parser.Expr) PrintError!void {
@@ -41,7 +51,12 @@ pub const AstPrinter = struct {
             .Unary => |group| try self.printUnary(group),
             .Literal => |literal| try self.printLiteral(literal),
             .Grouping => |group| try self.printGrouping(group),
+            .Variable => |variable| try self.printVariable(variable),
         }
+    }
+
+    pub fn printVariable(self: *const AstPrinter, expr: parser.VariableExpr) PrintError!void {
+        try self.write("{s}", .{expr.token.lexeme});
     }
 
     pub fn printGrouping(self: *const AstPrinter, expr: parser.GroupingExpr) PrintError!void {

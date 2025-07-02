@@ -150,7 +150,6 @@ pub const Scanner = struct {
     }
 
     fn matchToken(self: *Scanner, tokenType: TokenType) MatchResult {
-        // TODO: Handle error
         const str = self.currentStr();
         const token = Token{
             .line = self.line,
