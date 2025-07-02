@@ -1,6 +1,8 @@
 const std = @import("std");
 
 const scan = @import("scan.zig");
+const TokenType = scan.TokenType;
+const Token = scan.Token;
 
 // program        → statement* EOF ;
 // statement      → exprStmt | varDecl | printStmt ;
@@ -167,26 +169,15 @@ pub const Parser = struct {
     }
 
     fn parsePrintStatement(self: *Parser) ParseError!Statement {
-        self.advance();
+        _ = try self.consume(TokenType.PRINT);
         const expr = try self.parseExpression();
-
-        if (!self.is(scan.TokenType.SEMICOLON)) {
-            return ParseError.MissingSemicolon;
-        }
-        self.advance();
-
+        _ = self.consume(TokenType.SEMICOLON) catch return ParseError.MissingSemicolon;
         return Statement{ .Print = PrintStatement{ .expr = expr } };
     }
 
     fn parseVarStatement(self: *Parser) ParseError!Statement {
-        self.advance();
-
-        if (!self.is(scan.TokenType.IDENTIFIER)) {
-            return ParseError.MissingVarIdentifier;
-        }
-
-        const varIdentifier = self.currentToken();
-        self.advance();
+        _ = try self.consume(TokenType.VAR);
+        const varIdentifier = self.consume(TokenType.IDENTIFIER) catch return error.MissingVarIdentifier;
 
         var sttm = Statement{ .Var = VarStatement{ .name = varIdentifier.lexeme, .initializer = null } };
 
@@ -197,11 +188,7 @@ pub const Parser = struct {
             };
         }
 
-        if (!self.is(scan.TokenType.SEMICOLON)) {
-            return ParseError.MissingSemicolon;
-        }
-        self.advance();
-
+        _ = self.consume(TokenType.SEMICOLON) catch return ParseError.MissingSemicolon;
         return sttm;
     }
 
@@ -382,5 +369,13 @@ pub const Parser = struct {
     fn is(self: *Parser, tokenType: scan.TokenType) bool {
         const token = self.currentToken();
         return token.tokenType == tokenType;
+    }
+
+    fn consume(self: *Parser, tokenType: scan.TokenType) !Token {
+        if (!self.is(tokenType)) {
+            return ParseError.UnexpectedToken;
+        }
+        self.advance();
+        return self.previousToken();
     }
 };
