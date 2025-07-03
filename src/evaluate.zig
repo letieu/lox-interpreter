@@ -24,19 +24,19 @@ pub const EvalError = error{
     UndefinedVar,
 };
 
-pub fn evaluate(expr: *const parser.Expr, errorLine: *usize, environment: *const std.StringHashMap(EvalResult)) EvalError!EvalResult {
+pub fn evaluate(expr: *const parser.Expr, errorLine: *usize, comptime envType: type, env: *envType) EvalError!EvalResult {
     switch (expr.*) {
         .Literal => |literal| return try evaluateLiteral(literal),
-        .Grouping => |grouping| return try evaluateGrouping(grouping, errorLine, environment),
-        .Unary => |unary| return try evaluateUnary(unary, errorLine, environment),
-        .Binary => |binary| return try evaluateBinary(binary, errorLine, environment),
-        .Variable => |binary| return try evaluateVariable(binary, errorLine, environment),
+        .Grouping => |grouping| return try evaluateGrouping(grouping, errorLine, envType, env),
+        .Unary => |unary| return try evaluateUnary(unary, errorLine, envType, env),
+        .Binary => |binary| return try evaluateBinary(binary, errorLine, envType, env),
+        .Variable => |binary| return try evaluateVariable(binary, errorLine, envType, env),
     }
 }
 
-fn evaluateVariable(expr: parser.VariableExpr, errorLine: *usize, environment: *const std.StringHashMap(EvalResult)) EvalError!EvalResult {
+fn evaluateVariable(expr: parser.VariableExpr, errorLine: *usize, comptime envType: type, env: *envType) EvalError!EvalResult {
     const name = expr.token.lexeme;
-    return environment.get(name) orelse {
+    return env.get(name) orelse {
         errorLine.* = expr.token.line;
         return EvalError.UndefinedVar;
     };
@@ -52,12 +52,12 @@ fn evaluateLiteral(expr: parser.LiteralExpr) EvalError!EvalResult {
     }
 }
 
-fn evaluateGrouping(grouping: parser.GroupingExpr, errorLine: *usize, environment: *const std.StringHashMap(EvalResult)) EvalError!EvalResult {
-    return evaluate(grouping.expression, errorLine, environment);
+fn evaluateGrouping(grouping: parser.GroupingExpr, errorLine: *usize, comptime envType: type, env: *envType) EvalError!EvalResult {
+    return evaluate(grouping.expression, errorLine, envType, env);
 }
 
-fn evaluateUnary(unary: parser.UnaryExpr, errorLine: *usize, environment: *const std.StringHashMap(EvalResult)) EvalError!EvalResult {
-    const right = try evaluate(unary.right, errorLine, environment);
+fn evaluateUnary(unary: parser.UnaryExpr, errorLine: *usize, comptime envType: type, env: *envType) EvalError!EvalResult {
+    const right = try evaluate(unary.right, errorLine, envType, env);
 
     if (unary.operator.tokenType == TokenType.MINUS) {
         switch (right) {
@@ -81,9 +81,9 @@ fn evaluateUnary(unary: parser.UnaryExpr, errorLine: *usize, environment: *const
     return EvalError.Invalid;
 }
 
-fn evaluateBinary(binary: parser.BinaryExpr, errorLine: *usize, environment: *const std.StringHashMap(EvalResult)) EvalError!EvalResult {
-    const left = try evaluate(binary.left, errorLine, environment);
-    const right = try evaluate(binary.right, errorLine, environment);
+fn evaluateBinary(binary: parser.BinaryExpr, errorLine: *usize, comptime envType: type, env: *envType) EvalError!EvalResult {
+    const left = try evaluate(binary.left, errorLine, envType, env);
+    const right = try evaluate(binary.right, errorLine, envType, env);
 
     switch (binary.operator.tokenType) {
         .PLUS => {

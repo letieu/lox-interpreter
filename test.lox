@@ -1,3 +1,2 @@
 var b = "xladadsf";
-b = "new";
 print b;

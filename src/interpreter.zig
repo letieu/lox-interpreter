@@ -49,7 +49,7 @@ pub const Intepreter = struct {
 
     fn execPrint(self: *Intepreter, stmt: PrintStatement) !void {
         var errorLine: usize = 0;
-        const result = evaluate(&stmt.expr, &errorLine, &self.environment) catch |e| {
+        const result = evaluate(&stmt.expr, &errorLine, @TypeOf(self.environment), &self.environment) catch |e| {
             try self.printEvalError(e, &errorLine);
             std.process.exit(70);
             return;
@@ -73,7 +73,7 @@ pub const Intepreter = struct {
             return;
         }
 
-        const result = evaluate(&initializer.?, &errorLine, &self.environment) catch |e| {
+        const result = evaluate(&initializer.?, &errorLine, @TypeOf(self.environment), &self.environment) catch |e| {
             try self.printEvalError(e, &errorLine);
             std.process.exit(70);
             return;
@@ -84,7 +84,7 @@ pub const Intepreter = struct {
 
     fn execExpr(self: *Intepreter, stmt: ExpressionStatement) !void {
         var errorLine: usize = 0;
-        _ = evaluate(&stmt.expr, &errorLine, &self.environment) catch |e| {
+        _ = evaluate(&stmt.expr, &errorLine, @TypeOf(self.environment), &self.environment) catch |e| {
             try self.printEvalError(e, &errorLine);
             std.process.exit(70);
             return;
