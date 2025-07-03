@@ -4,17 +4,21 @@ const scan = @import("scan.zig");
 const TokenType = scan.TokenType;
 const Token = scan.Token;
 
-// program        → statement* EOF ;
-// statement      → exprStmt | varDecl | printStmt ;
-// exprStmt       → expression ";";
+// program        → declaration* EOF ;
+// declaration    → varDecl | statement ;
+// statement      → exprStmt | printStmt | block ;
+// block          → "{" declaration* "}" ;
+// exprStmt       → expression ";" ;
 // varDecl        → "var" IDENTIFIER ( "=" expression)? ";" ;
 // printStmt      → "print" expression ";" ;
-// expression     → equality ;
+// expression     → assignment ;
+// assignment → IDENTIFIER "=" assignment
+//                  | equality ;
 // equality       → comparison ( ( "!=" | "==" ) comparison )* ;
 // comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
 // term           → factor ( ( "-" | "+" ) factor )* ;
 // factor         → unary ( ( "/" | "*" ) unary )* ;
-// unary          → ( "!" | "-" ) unary
+// unary      → ( "!" | "-" ) unary
 //                | primary ;
 // primary        → NUMBER | STRING | "true" | "false" | "nil"
 //                | "(" expression ")"
@@ -33,6 +37,7 @@ pub const VarStatement = struct {
 };
 
 pub const Expr = union(enum) {
+    Assign: AssignExpr,
     Variable: VariableExpr,
     Literal: LiteralExpr,
     Unary: UnaryExpr,
@@ -46,6 +51,11 @@ pub const LiteralType = enum {
     TRUE,
     FALSE,
     NIL,
+};
+
+pub const AssignExpr = struct {
+    name: Token,
+    left: *Expr,
 };
 
 pub const VariableExpr = struct {
@@ -87,6 +97,7 @@ pub const SyntaxError = error{
     MissingExpression,
     MissingRightParen,
     UnexpectedToken,
+    InvalidAssignmentTarget,
 };
 
 pub const ParseError = SyntaxError || error{OutOfMemory};
@@ -117,7 +128,7 @@ pub const Parser = struct {
         var err: ?ParseError = null;
 
         while (!self.isAtEnd()) {
-            const statement = self.parseStatement() catch |e| {
+            const statement = self.parseDeclaration() catch |e| {
                 err = e;
                 try self.printError(e);
                 self.synchronize();
@@ -143,7 +154,8 @@ pub const Parser = struct {
             error.MissingExpression => try writer.print("[line {d}] Error at '{s}': Miss expression.\n", .{ prevToken.line, prevToken.lexeme }),
             error.MissingRightParen => try writer.print("[line {d}] Error at '{s}': Miss ')'.\n", .{ prevToken.line, prevToken.lexeme }),
             error.OutOfMemory => try writer.print("Out of memory.\n", .{}),
-            error.UnexpectedToken => try writer.print("[Line {d}] Unexpected token '{s}'", .{ current.line, current.lexeme }),
+            error.UnexpectedToken => try writer.print("[Line {d}] Unexpected token '{s}'\n", .{ current.line, current.lexeme }),
+            error.InvalidAssignmentTarget => try writer.print("[Line {d}] Invalid assignment target: '{s}'\n", .{ prevToken.line, prevToken.lexeme }),
         }
     }
 
@@ -162,8 +174,17 @@ pub const Parser = struct {
         }
     }
 
+    fn parseDeclaration(self: *Parser) ParseError!Statement {
+        // declaration    → varDecl | statement ;
+        if (self.is(scan.TokenType.VAR)) {
+            return self.parseVarStatement();
+        }
+
+        return self.parseStatement();
+    }
+
     fn parseStatement(self: *Parser) ParseError!Statement {
-        // statement      →  printStmt | exprStmt ;
+        // statement      → exprStmt | varDecl | printStmt | block ;
         if (self.is(scan.TokenType.PRINT)) {
             return self.parsePrintStatement();
         }
@@ -210,8 +231,31 @@ pub const Parser = struct {
     }
 
     fn parseExpression(self: *Parser) ParseError!Expr {
-        // expression     → equality ;
-        return self.parseEquality();
+        // expression     → assignment ;
+        return self.parseAssignment();
+    }
+
+    fn parseAssignment(self: *Parser) ParseError!Expr {
+        // [R] assignment → IDENTIFIER "=" assignment
+        //                  | equality ;
+        const expr = try self.parseEquality();
+
+        if (self.is(TokenType.EQUAL)) {
+            self.advance();
+            const left = try self.alloc.create(Expr);
+            left.* = try self.parseAssignment();
+
+            if (expr != .Variable) {
+                return ParseError.InvalidAssignmentTarget;
+            }
+
+            return Expr{ .Assign = AssignExpr{
+                .name = expr.Variable.token,
+                .left = left,
+            } };
+        }
+
+        return expr;
     }
 
     fn parseEquality(self: *Parser) ParseError!Expr {

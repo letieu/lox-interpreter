@@ -1,2 +1,8 @@
-var b = "xladadsf";
-print b;
+var foo;
+var quz;
+
+// The assignment operator should return
+// the value that was assigned
+foo = quz = 61 + 27 * 90;
+print foo;
+print quz;

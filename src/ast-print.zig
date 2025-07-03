@@ -52,7 +52,14 @@ pub const AstPrinter = struct {
             .Literal => |literal| try self.printLiteral(literal),
             .Grouping => |group| try self.printGrouping(group),
             .Variable => |variable| try self.printVariable(variable),
+            .Assign => |assign| try self.printAssign(assign),
         }
+    }
+
+    pub fn printAssign(self: *const AstPrinter, expr: parser.AssignExpr) PrintError!void {
+        try self.write("(assign {s} ", .{expr.name.lexeme});
+        try self.printExpression(expr.left);
+        try self.write(" )", .{});
     }
 
     pub fn printVariable(self: *const AstPrinter, expr: parser.VariableExpr) PrintError!void {

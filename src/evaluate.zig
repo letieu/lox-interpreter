@@ -31,7 +31,17 @@ pub fn evaluate(expr: *const parser.Expr, errorLine: *usize, comptime envType: t
         .Unary => |unary| return try evaluateUnary(unary, errorLine, envType, env),
         .Binary => |binary| return try evaluateBinary(binary, errorLine, envType, env),
         .Variable => |binary| return try evaluateVariable(binary, errorLine, envType, env),
+        .Assign => |assign| return try evaluateAssign(assign, errorLine, envType, env),
     }
+}
+
+fn evaluateAssign(expr: parser.AssignExpr, errorLine: *usize, comptime envType: type, env: *envType) EvalError!EvalResult {
+    const res = try evaluate(expr.left, errorLine, envType, env);
+    env.put(expr.name.lexeme, res) catch {
+        return EvalError.AllocationError;
+    };
+
+    return res;
 }
 
 fn evaluateVariable(expr: parser.VariableExpr, errorLine: *usize, comptime envType: type, env: *envType) EvalError!EvalResult {

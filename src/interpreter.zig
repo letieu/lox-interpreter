@@ -3,6 +3,7 @@ const Statement = @import("parse.zig").Statement;
 const PrintStatement = @import("parse.zig").PrintStatement;
 const ExpressionStatement = @import("parse.zig").ExpressionStatement;
 const VarStatement = @import("parse.zig").VarStatement;
+const Expr = @import("parse.zig").Expr;
 
 const std = @import("std");
 const evaluate = @import("evaluate.zig").evaluate;
@@ -32,7 +33,9 @@ pub const Intepreter = struct {
             switch (stmt) {
                 .Print => |printStmt| try self.execPrint(printStmt),
                 .Var => |varDeclaration| try self.execVarDec(varDeclaration),
-                .Expression => |exprStmt| try self.execExpr(exprStmt),
+                .Expression => |exprStmt| {
+                    _ = try self.execExpr(exprStmt.expr);
+                },
             }
         }
     }
@@ -48,12 +51,7 @@ pub const Intepreter = struct {
     }
 
     fn execPrint(self: *Intepreter, stmt: PrintStatement) !void {
-        var errorLine: usize = 0;
-        const result = evaluate(&stmt.expr, &errorLine, @TypeOf(self.environment), &self.environment) catch |e| {
-            try self.printEvalError(e, &errorLine);
-            std.process.exit(70);
-            return;
-        };
+        const result = try self.execExpr(stmt.expr);
 
         switch (result) {
             .boolean => try std.io.getStdOut().writer().print("{?}", .{result.boolean}),
@@ -66,25 +64,19 @@ pub const Intepreter = struct {
     }
 
     fn execVarDec(self: *Intepreter, stmt: VarStatement) !void {
-        var errorLine: usize = 0;
         const initializer = stmt.initializer;
         if (initializer == null) {
             try self.environment.put(stmt.name, EvalResult.nil);
             return;
         }
 
-        const result = evaluate(&initializer.?, &errorLine, @TypeOf(self.environment), &self.environment) catch |e| {
-            try self.printEvalError(e, &errorLine);
-            std.process.exit(70);
-            return;
-        };
-
+        const result = try self.execExpr(initializer.?);
         try self.environment.put(stmt.name, result);
     }
 
-    fn execExpr(self: *Intepreter, stmt: ExpressionStatement) !void {
+    fn execExpr(self: *Intepreter, expr: Expr) !EvalResult {
         var errorLine: usize = 0;
-        _ = evaluate(&stmt.expr, &errorLine, @TypeOf(self.environment), &self.environment) catch |e| {
+        return evaluate(&expr, &errorLine, @TypeOf(self.environment), &self.environment) catch |e| {
             try self.printEvalError(e, &errorLine);
             std.process.exit(70);
             return;
