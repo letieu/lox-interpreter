@@ -34,6 +34,7 @@ pub const AstPrinter = struct {
         switch (stmt.*) {
             .expression => |exprStmt| try self.printExpression(&exprStmt.expr),
             .print => |printStmt| try self.printPrint(&printStmt.expr),
+            .block => |block| try self.printBlockStmt(block),
         }
         try self.write("\n", .{});
     }
@@ -44,6 +45,12 @@ pub const AstPrinter = struct {
         if (maybeExpr != null) {
             try self.printExpression(&maybeExpr.?);
         }
+        try self.write(")", .{});
+    }
+
+    fn  printBlockStmt(self: *const AstPrinter, block: parser.Statement.BlockStatement) PrintError!void {
+        try self.write("(block ", .{});
+        for (block.declarations) |decl| try self.printDeclaration(&decl);
         try self.write(")", .{});
     }
 

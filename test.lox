@@ -1,8 +1,8 @@
 var foo;
 var quz;
 
-// The assignment operator should return
-// the value that was assigned
-foo = quz = 61 + 27 * 90;
-print foo;
-print quz;
+{
+  foo = quz = 61 + 27 * 90;
+  print foo;
+  print quz;
+}

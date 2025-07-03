@@ -23,6 +23,7 @@ pub const EvalError = error{
     Invalid,
     NotANumber,
     UndefinedVar,
+    OutOfMemory,
 };
 
 pub fn evaluate(expr: *const parser.Expr, errorLine: *usize, comptime envType: type, env: *envType) EvalError!EvalResult {

@@ -39,10 +39,13 @@ pub const VarDecl = struct {
 pub const Statement = union(enum) {
     print: PrintStatement,
     expression: ExpressionStatement,
+    block: BlockStatement,
 
     pub const PrintStatement = struct { expr: Expr };
 
     pub const ExpressionStatement = struct { expr: Expr };
+
+    pub const BlockStatement = struct { declarations: []Declaration };
 };
 
 pub const Expr = union(enum) {
@@ -188,12 +191,29 @@ pub const Parser = struct {
     }
 
     fn parseStatement(self: *Parser) ParseError!Statement {
-        // statement      → exprStmt | varDecl | printStmt | block ;
+        // statement      → exprStmt | printStmt | block ;
         if (self.is(scan.TokenType.PRINT)) {
             return self.parsePrintStatement();
         }
+        if (self.is(scan.TokenType.LEFT_BRACE)) {
+            return self.parseBlockStatement();
+        }
 
         return self.parseExpressionStatement();
+    }
+
+    fn parseBlockStatement(self: *Parser) ParseError!Statement {
+        _ = try self.consume(TokenType.LEFT_BRACE);
+
+        var declarations = std.ArrayList(Declaration).init(self.alloc);
+
+        while (!self.is(TokenType.RIGHT_BRACE) and !self.isAtEnd()) {
+            const declaration = try self.parseDeclaration();
+            try declarations.append(declaration);
+        }
+        _ = try self.consume(TokenType.RIGHT_BRACE);
+
+        return Statement{ .block = Statement.BlockStatement{ .declarations = try declarations.toOwnedSlice() } };
     }
 
     fn parsePrintStatement(self: *Parser) ParseError!Statement {

@@ -32,7 +32,7 @@ pub const Intepreter = struct {
         }
     }
 
-    fn execDecl(self: *Intepreter, decl: Declaration) !void {
+    fn execDecl(self: *Intepreter, decl: Declaration) EvalError!void {
         switch (decl) {
             .var_decl => |varDeclaration| try self.execVarDecl(varDeclaration),
             .stmt => |exprStmt| {
@@ -43,6 +43,7 @@ pub const Intepreter = struct {
 
     fn execStmt(self: *Intepreter, stmt: Statement) !void {
         switch (stmt) {
+            .block => |blockStmt| try self.execBlock(blockStmt),
             .print => |printStmt| try self.execPrint(printStmt),
             .expression => |exprStmt| {
                 _ = try self.execExpr(exprStmt.expr);
@@ -50,27 +51,34 @@ pub const Intepreter = struct {
         }
     }
 
+    fn execBlock(self: *Intepreter, block: Statement.BlockStatement) !void {
+        for (block.declarations) |decl| {
+            _ = try self.execDecl(decl);
+        }
+    }
+
     fn printEvalError(self: *Intepreter, e: EvalError, errorLine: *const usize) !void {
         switch (e) {
-            error.AllocationError => try self.stdErr.writer().print("Allocation Error.\n", .{}),
-            error.NotANumber => try self.stdErr.writer().print("Operand must be a number.\n", .{}),
-            error.Invalid => try self.stdErr.writer().print("Invalid.\n", .{}),
-            error.UndefinedVar => try self.stdErr.writer().print("Undefined var.\n", .{}),
+            error.AllocationError => self.printErr("Allocation Error.\n", .{}),
+            error.NotANumber => self.printErr("Operand must be a number.\n", .{}),
+            error.Invalid => self.printErr("Invalid.\n", .{}),
+            error.UndefinedVar => self.printErr("Undefined var.\n", .{}),
+            error.OutOfMemory => self.printErr("OutOfMemory.\n", .{}),
         }
-        try self.stdErr.writer().print("[line {d}]", .{errorLine.*});
+        self.printErr("[line {d}]", .{errorLine.*});
     }
 
     fn execPrint(self: *Intepreter, stmt: Statement.PrintStatement) !void {
         const result = try self.execExpr(stmt.expr);
 
         switch (result) {
-            .boolean => try std.io.getStdOut().writer().print("{?}", .{result.boolean}),
-            .number => try std.io.getStdOut().writer().print("{d}", .{result.number}),
-            .string => try std.io.getStdOut().writer().print("{s}", .{result.string}),
-            .nil => try std.io.getStdOut().writer().print("nil", .{}),
+            .boolean => self.printOut("{?}", .{result.boolean}),
+            .number => self.printOut("{d}", .{result.number}),
+            .string => self.printOut("{s}", .{result.string}),
+            .nil => self.printOut("nil", .{}),
         }
 
-        try std.io.getStdOut().writer().print("\n", .{});
+        self.printOut("\n", .{});
     }
 
     fn execVarDecl(self: *Intepreter, decl: VarDecl) !void {
@@ -87,9 +95,23 @@ pub const Intepreter = struct {
     fn execExpr(self: *Intepreter, expr: Expr) !EvalResult {
         var errorLine: usize = 0;
         return evaluate(&expr, &errorLine, @TypeOf(self.environment), &self.environment) catch |e| {
-            try self.printEvalError(e, &errorLine);
+            self.printEvalError(e, &errorLine) catch {
+                std.debug.print("print error", .{});
+            };
             std.process.exit(70);
             return;
+        };
+    }
+
+    fn printErr(self: *Intepreter, comptime format: []const u8, args: anytype) void {
+        self.stdErr.writer().print(format, args) catch {
+            std.debug.print("Print error", .{});
+        };
+    }
+
+    fn printOut(self: *Intepreter, comptime format: []const u8, args: anytype) void {
+        self.stdOut.writer().print(format, args) catch {
+            std.debug.print("Print error", .{});
         };
     }
 };
