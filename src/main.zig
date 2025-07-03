@@ -19,11 +19,11 @@ const commands = std.StaticStringMap(Command).initComptime(.{
     .{ "run", .Run },
 });
 
-pub fn printAst(statements: []parse.Statement) !void {
+pub fn printAst(declarations: []parse.Declaration) !void {
     const printer = astPrint.AstPrinter.init();
 
-    for (statements) |statement| {
-        try printer.printStatement(&statement);
+    for (declarations) |declaration| {
+        try printer.printDeclaration(&declaration);
     }
     return;
 }
@@ -61,15 +61,15 @@ pub fn main() !void {
     }
 
     var parser = try parse.Parser.init(tokens, alloc, stdOut, stdErr);
-    const statements = parser.parse() catch {
+    const declarations = parser.parse() catch {
         std.process.exit(65);
     };
     if (command == Command.Parse) {
-        try printAst(statements);
+        try printAst(declarations);
         return;
     }
 
-    var interpreter = Interpreter.init(statements, alloc, stdOut, stdErr);
+    var interpreter = Interpreter.init(declarations, alloc, stdOut, stdErr);
     try interpreter.run();
 
     return;

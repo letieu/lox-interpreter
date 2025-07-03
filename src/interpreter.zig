@@ -1,9 +1,7 @@
 const Statement = @import("parse.zig").Statement;
-
-const PrintStatement = @import("parse.zig").PrintStatement;
-const ExpressionStatement = @import("parse.zig").ExpressionStatement;
-const VarStatement = @import("parse.zig").VarStatement;
 const Expr = @import("parse.zig").Expr;
+const Declaration = @import("parse.zig").Declaration;
+const VarDecl = @import("parse.zig").VarDecl;
 
 const std = @import("std");
 const evaluate = @import("evaluate.zig").evaluate;
@@ -11,16 +9,16 @@ const EvalResult = @import("evaluate.zig").EvalResult;
 const EvalError = @import("evaluate.zig").EvalError;
 
 pub const Intepreter = struct {
-    statements: []const Statement,
+    declarations: []const Declaration,
     alloc: std.mem.Allocator,
     stdOut: std.fs.File,
     stdErr: std.fs.File,
 
     environment: std.StringHashMap(EvalResult),
 
-    pub fn init(statements: []const Statement, alloc: std.mem.Allocator, stdOut: std.fs.File, stdErr: std.fs.File) Intepreter {
+    pub fn init(statements: []const Declaration, alloc: std.mem.Allocator, stdOut: std.fs.File, stdErr: std.fs.File) Intepreter {
         return Intepreter{
-            .statements = statements,
+            .declarations = statements,
             .alloc = alloc,
             .stdOut = stdOut,
             .stdErr = stdErr,
@@ -29,14 +27,26 @@ pub const Intepreter = struct {
     }
 
     pub fn run(self: *Intepreter) !void {
-        for (self.statements) |stmt| {
-            switch (stmt) {
-                .Print => |printStmt| try self.execPrint(printStmt),
-                .Var => |varDeclaration| try self.execVarDec(varDeclaration),
-                .Expression => |exprStmt| {
-                    _ = try self.execExpr(exprStmt.expr);
-                },
-            }
+        for (self.declarations) |decl| {
+            try self.execDecl(decl);
+        }
+    }
+
+    fn execDecl(self: *Intepreter, decl: Declaration) !void {
+        switch (decl) {
+            .var_decl => |varDeclaration| try self.execVarDecl(varDeclaration),
+            .stmt => |exprStmt| {
+                _ = try self.execStmt(exprStmt);
+            },
+        }
+    }
+
+    fn execStmt(self: *Intepreter, stmt: Statement) !void {
+        switch (stmt) {
+            .print => |printStmt| try self.execPrint(printStmt),
+            .expression => |exprStmt| {
+                _ = try self.execExpr(exprStmt.expr);
+            },
         }
     }
 
@@ -50,7 +60,7 @@ pub const Intepreter = struct {
         try self.stdErr.writer().print("[line {d}]", .{errorLine.*});
     }
 
-    fn execPrint(self: *Intepreter, stmt: PrintStatement) !void {
+    fn execPrint(self: *Intepreter, stmt: Statement.PrintStatement) !void {
         const result = try self.execExpr(stmt.expr);
 
         switch (result) {
@@ -63,15 +73,15 @@ pub const Intepreter = struct {
         try std.io.getStdOut().writer().print("\n", .{});
     }
 
-    fn execVarDec(self: *Intepreter, stmt: VarStatement) !void {
-        const initializer = stmt.initializer;
+    fn execVarDecl(self: *Intepreter, decl: VarDecl) !void {
+        const initializer = decl.initializer;
         if (initializer == null) {
-            try self.environment.put(stmt.name, EvalResult.nil);
+            try self.environment.put(decl.name, EvalResult.nil);
             return;
         }
 
         const result = try self.execExpr(initializer.?);
-        try self.environment.put(stmt.name, result);
+        try self.environment.put(decl.name, result);
     }
 
     fn execExpr(self: *Intepreter, expr: Expr) !EvalResult {
