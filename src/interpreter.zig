@@ -2,6 +2,7 @@ const Statement = @import("parse.zig").Statement;
 const Expr = @import("parse.zig").Expr;
 const Declaration = @import("parse.zig").Declaration;
 const VarDecl = @import("parse.zig").VarDecl;
+const Environment = @import("environment.zig").Environment;
 
 const std = @import("std");
 const evaluate = @import("evaluate.zig").evaluate;
@@ -14,7 +15,7 @@ pub const Intepreter = struct {
     stdOut: std.fs.File,
     stdErr: std.fs.File,
 
-    environment: std.StringHashMap(EvalResult),
+    environment: Environment,
 
     pub fn init(statements: []const Declaration, alloc: std.mem.Allocator, stdOut: std.fs.File, stdErr: std.fs.File) Intepreter {
         return Intepreter{
@@ -22,7 +23,9 @@ pub const Intepreter = struct {
             .alloc = alloc,
             .stdOut = stdOut,
             .stdErr = stdErr,
-            .environment = std.StringHashMap(EvalResult).init(alloc),
+            .environment = Environment.init(alloc, null) catch {
+                std.debug.print("Failed to init environment", .{});
+            },
         };
     }
 
@@ -52,9 +55,15 @@ pub const Intepreter = struct {
     }
 
     fn execBlock(self: *Intepreter, block: Statement.BlockStatement) !void {
+        var prevEnv = self.environment;
+        const blockEnv = try Environment.init(self.alloc, &prevEnv);
+        self.environment = blockEnv;
+
         for (block.declarations) |decl| {
             _ = try self.execDecl(decl);
         }
+
+        self.environment = prevEnv;
     }
 
     fn printEvalError(self: *Intepreter, e: EvalError, errorLine: *const usize) !void {
@@ -84,12 +93,12 @@ pub const Intepreter = struct {
     fn execVarDecl(self: *Intepreter, decl: VarDecl) !void {
         const initializer = decl.initializer;
         if (initializer == null) {
-            try self.environment.put(decl.name, EvalResult.nil);
+            try self.environment.define(decl.name, EvalResult.nil);
             return;
         }
 
         const result = try self.execExpr(initializer.?);
-        try self.environment.put(decl.name, result);
+        try self.environment.define(decl.name, result);
     }
 
     fn execExpr(self: *Intepreter, expr: Expr) !EvalResult {

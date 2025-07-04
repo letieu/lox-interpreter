@@ -39,7 +39,7 @@ pub fn evaluate(expr: *const parser.Expr, errorLine: *usize, comptime envType: t
 
 fn evaluateAssign(expr: Expr.AssignExpr, errorLine: *usize, comptime envType: type, env: *envType) EvalError!EvalResult {
     const res = try evaluate(expr.left, errorLine, envType, env);
-    env.put(expr.name.lexeme, res) catch {
+    env.assign(expr.name.lexeme, res) catch {
         return EvalError.AllocationError;
     };
 

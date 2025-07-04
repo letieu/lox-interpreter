@@ -17,9 +17,11 @@ fn doHi(comptime T: type, person: T) !void {
 }
 
 pub fn main() !void {
-    const a = StA{};
-    const b = StB{};
-
-    try doHi(StA, a);
-    try doHi(StB, b);
+    var a: usize = 1;
+    var tmp = a;
+    const b: *usize = &tmp;
+    a = 5;
+    
+    std.debug.print("a {d} \n", .{a});
+    std.debug.print("b {d} \n", .{b.*});
 }

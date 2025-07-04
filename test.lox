@@ -1,8 +1,19 @@
-var foo;
-var quz;
-
+var hello = "global hello";
+var bar = "global bar";
+var quz = "global quz";
 {
-  foo = quz = 61 + 27 * 90;
-  print foo;
+  var hello = "outer hello";
+  var bar = "outer bar";
+  {
+    var hello = "inner hello";
+    print hello;
+    print bar;
+    print quz;
+  }
+  print hello;
+  print bar;
   print quz;
 }
+print hello;
+print bar;
+print quz;
