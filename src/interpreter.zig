@@ -8,6 +8,7 @@ const std = @import("std");
 const evaluate = @import("evaluate.zig").evaluate;
 const EvalResult = @import("evaluate.zig").EvalResult;
 const EvalError = @import("evaluate.zig").EvalError;
+const isTruthy = @import("evaluate.zig").isTruthy;
 
 pub const Intepreter = struct {
     declarations: []const Declaration,
@@ -80,9 +81,8 @@ pub const Intepreter = struct {
 
     fn execIfStmt(self: *Intepreter, stmt: Statement.IfStatement) !void {
         const conditional_result = try self.execExpr(stmt.condition);
-        if (conditional_result != .boolean) return;
 
-        if (conditional_result.boolean == true) {
+        if (isTruthy(conditional_result)) {
             try self.execStmt(stmt.inner.*);
         } else {
             if (stmt.elseStmt != null) {

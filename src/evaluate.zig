@@ -95,6 +95,16 @@ fn evaluateUnary(unary: Expr.UnaryExpr, errorLine: *usize, comptime envType: typ
 
 fn evaluateBinary(binary: Expr.BinaryExpr, errorLine: *usize, comptime envType: type, env: *envType) EvalError!EvalResult {
     const left = try evaluate(binary.left, errorLine, envType, env);
+    switch (binary.operator.tokenType) {
+        .OR => {
+            if (isTruthy(left)) {
+                return left;
+            }
+            return try evaluate(binary.right, errorLine, envType, env);
+        },
+        else => {},
+    }
+
     const right = try evaluate(binary.right, errorLine, envType, env);
 
     switch (binary.operator.tokenType) {
@@ -176,5 +186,14 @@ fn validateNumberOperand(left: EvalResult, right: EvalResult, errorLine: *usize,
     if (left != .number or right != .number) {
         errorLine.* = token.line;
         return EvalError.NotANumber;
+    }
+}
+
+pub fn isTruthy(value: EvalResult) bool {
+    switch (value) {
+        .boolean => return value.boolean,
+        .number => return value.number != 0,
+        .string => return value.string.len > 0,
+        .nil => return false,
     }
 }
