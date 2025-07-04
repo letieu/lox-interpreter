@@ -35,8 +35,16 @@ pub const AstPrinter = struct {
             .expression => |exprStmt| try self.printExpression(&exprStmt.expr),
             .print => |printStmt| try self.printPrint(&printStmt.expr),
             .block => |block| try self.printBlockStmt(block),
+            .ifStmt => |ifStmt| try self.printIfStmt(ifStmt),
         }
         try self.write("\n", .{});
+    }
+
+    pub fn printIfStmt(self: *const AstPrinter, stmt: parser.Statement.IfStatement) PrintError!void {
+        try self.write("(if ", .{});
+        try self.printExpression(&stmt.condition);
+        try self.printStatement(stmt.inner);
+        try self.write(")", .{});
     }
 
     pub fn printVarDeclaration(self: *const AstPrinter, var_decl: parser.VarDecl) PrintError!void {
@@ -48,8 +56,8 @@ pub const AstPrinter = struct {
         try self.write(")", .{});
     }
 
-    fn  printBlockStmt(self: *const AstPrinter, block: parser.Statement.BlockStatement) PrintError!void {
-        try self.write("(block ", .{});
+    fn printBlockStmt(self: *const AstPrinter, block: parser.Statement.BlockStatement) PrintError!void {
+        try self.write("(block \n", .{});
         for (block.declarations) |decl| try self.printDeclaration(&decl);
         try self.write(")", .{});
     }

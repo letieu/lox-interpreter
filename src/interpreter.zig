@@ -44,10 +44,11 @@ pub const Intepreter = struct {
         }
     }
 
-    fn execStmt(self: *Intepreter, stmt: Statement) !void {
+    fn execStmt(self: *Intepreter, stmt: Statement) EvalError!void {
         switch (stmt) {
             .block => |blockStmt| try self.execBlock(blockStmt),
             .print => |printStmt| try self.execPrint(printStmt),
+            .ifStmt => |ifStmt| try self.execIfStmt(ifStmt),
             .expression => |exprStmt| {
                 _ = try self.execExpr(exprStmt.expr);
             },
@@ -75,6 +76,19 @@ pub const Intepreter = struct {
             error.OutOfMemory => self.printErr("OutOfMemory.\n", .{}),
         }
         self.printErr("[line {d}]", .{errorLine.*});
+    }
+
+    fn execIfStmt(self: *Intepreter, stmt: Statement.IfStatement) !void {
+        const conditional_result = try self.execExpr(stmt.condition);
+        if (conditional_result != .boolean) return;
+
+        if (conditional_result.boolean == true) {
+            try self.execStmt(stmt.inner.*);
+        } else {
+            if (stmt.elseStmt != null) {
+                try self.execStmt(stmt.elseStmt.?.*);
+            }
+        }
     }
 
     fn execPrint(self: *Intepreter, stmt: Statement.PrintStatement) !void {

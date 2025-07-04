@@ -6,7 +6,9 @@ const Token = scan.Token;
 
 // program        → declaration* EOF ;
 // declaration    → varDecl | statement ;
-// statement      → exprStmt | printStmt | block ;
+// statement      → ifStmt | exprStmt | printStmt | block ;
+// ifStmt         → "if" "(" expression ")" statement
+//                ( "else" statement )? ;
 // block          → "{" declaration* "}" ;
 // exprStmt       → expression ";" ;
 // varDecl        → "var" IDENTIFIER ( "=" expression)? ";" ;
@@ -40,12 +42,15 @@ pub const Statement = union(enum) {
     print: PrintStatement,
     expression: ExpressionStatement,
     block: BlockStatement,
+    ifStmt: IfStatement,
 
     pub const PrintStatement = struct { expr: Expr };
 
     pub const ExpressionStatement = struct { expr: Expr };
 
     pub const BlockStatement = struct { declarations: []Declaration };
+
+    pub const IfStatement = struct { condition: Expr, inner: *const Statement, elseStmt: ?*const Statement };
 };
 
 pub const Expr = union(enum) {
@@ -103,6 +108,7 @@ pub const SyntaxError = error{
     MissingVarIdentifier,
     MissingExpression,
     MissingRightParen,
+    MissingLeftParen,
     MissingRightBrace,
     UnexpectedToken,
     InvalidAssignmentTarget,
@@ -160,7 +166,8 @@ pub const Parser = struct {
             error.MissingVarIdentifier => try writer.print("[line {d}] Error at '{s}': Expected var identifier.\n", .{ prevToken.line, prevToken.lexeme }),
             error.MissingVarInit => try writer.print("[line {d}] Error at '{s}': Expected var initializer.\n", .{ prevToken.line, prevToken.lexeme }),
             error.MissingExpression => try writer.print("[line {d}] Error at '{s}': Miss expression.\n", .{ prevToken.line, prevToken.lexeme }),
-            error.MissingRightParen => try writer.print("[line {d}] Error at '{s}': Miss ')'.\n", .{ prevToken.line, prevToken.lexeme }),
+            error.MissingRightParen => try writer.print("[line {d}] Error at '{s}': Miss '('.\n", .{ prevToken.line, prevToken.lexeme }),
+            error.MissingLeftParen => try writer.print("[line {d}] Error at '{s}': Miss ')'.\n", .{ prevToken.line, prevToken.lexeme }),
             error.OutOfMemory => try writer.print("Out of memory.\n", .{}),
             error.UnexpectedToken => try writer.print("[Line {d}] Unexpected token '{s}'\n", .{ current.line, current.lexeme }),
             error.InvalidAssignmentTarget => try writer.print("[Line {d}] Invalid assignment target: '{s}'\n", .{ prevToken.line, prevToken.lexeme }),
@@ -193,15 +200,48 @@ pub const Parser = struct {
     }
 
     fn parseStatement(self: *Parser) ParseError!Statement {
-        // statement      → exprStmt | printStmt | block ;
+        // statement      → ifStmt | exprStmt | printStmt | block ;
         if (self.is(scan.TokenType.PRINT)) {
             return self.parsePrintStatement();
         }
         if (self.is(scan.TokenType.LEFT_BRACE)) {
             return self.parseBlockStatement();
         }
+        if (self.is(scan.TokenType.IF)) {
+            return self.parseIfStatement();
+        }
 
         return self.parseExpressionStatement();
+    }
+
+    fn parseIfStatement(self: *Parser) ParseError!Statement {
+        // ifStmt         → "if" "(" expression ")" statement
+        //                ( "else" statement )? ;
+        _ = try self.consume(TokenType.IF);
+        _ = self.consume(TokenType.LEFT_PAREN) catch return ParseError.MissingLeftParen;
+        const condition = try self.parseExpression();
+        _ = self.consume(TokenType.RIGHT_PAREN) catch return ParseError.MissingRightParen;
+
+        const inner = try self.alloc.create(Statement);
+        inner.* = try self.parseStatement();
+
+        if (self.is(TokenType.ELSE)) {
+            _ = try self.consume(TokenType.ELSE);
+            const elseStmt = try self.alloc.create(Statement);
+            elseStmt.* = try self.parseStatement();
+
+            return Statement{ .ifStmt = Statement.IfStatement{
+                .condition = condition,
+                .inner = inner,
+                .elseStmt = elseStmt,
+            } };
+        }
+
+        return Statement{ .ifStmt = Statement.IfStatement{
+            .condition = condition,
+            .inner = inner,
+            .elseStmt = null,
+        } };
     }
 
     fn parseBlockStatement(self: *Parser) ParseError!Statement {
