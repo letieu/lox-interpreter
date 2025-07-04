@@ -97,9 +97,11 @@ fn evaluateBinary(binary: Expr.BinaryExpr, errorLine: *usize, comptime envType: 
     const left = try evaluate(binary.left, errorLine, envType, env);
     switch (binary.operator.tokenType) {
         .OR => {
-            if (isTruthy(left)) {
-                return left;
-            }
+            if (isTruthy(left)) return left;
+            return try evaluate(binary.right, errorLine, envType, env);
+        },
+        .AND => {
+            if (!isTruthy(left)) return left;
             return try evaluate(binary.right, errorLine, envType, env);
         },
         else => {},
@@ -193,7 +195,7 @@ pub fn isTruthy(value: EvalResult) bool {
     switch (value) {
         .boolean => return value.boolean,
         .number => return value.number != 0,
-        .string => return value.string.len > 0,
+        .string => return true,
         .nil => return false,
     }
 }

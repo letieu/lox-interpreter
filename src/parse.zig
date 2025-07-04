@@ -15,8 +15,9 @@ const Token = scan.Token;
 // printStmt      → "print" expression ";" ;
 // expression     → assignment ;
 // assignment     → IDENTIFIER "=" assignment
-//                  | or ;
-// or             → equality ( OR equality )* ;
+//                  | AND ;
+// AND            → OR ( and OR )* ;
+// OR             → equality ( or equality )* ;
 // equality       → comparison ( ( "!=" | "==" ) comparison )* ;
 // comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
 // term           → factor ( ( "-" | "+" ) factor )* ;
@@ -300,8 +301,8 @@ pub const Parser = struct {
 
     fn parseAssignment(self: *Parser) ParseError!Expr {
         // [R] assignment → IDENTIFIER "=" assignment
-        //                  | or ;
-        const expr = try self.parseOr();
+        //                  | AND ;
+        const expr = try self.parseAnd();
 
         if (self.is(TokenType.EQUAL)) {
             self.advance();
@@ -321,8 +322,26 @@ pub const Parser = struct {
         return expr;
     }
 
+    fn parseAnd(self: *Parser) ParseError!Expr {
+        // AND             → OR ( and OR )* ;
+        var expr = try self.parseOr();
+
+        while (self.is(TokenType.AND)) {
+            const operator = try self.consume(TokenType.AND);
+
+            const left = try self.alloc.create(Expr);
+            const right = try self.alloc.create(Expr);
+
+            left.* = expr;
+            right.* = try self.parseEquality();
+
+            expr = Expr{ .binary = Expr.BinaryExpr{ .left = left, .operator = operator, .right = right } };
+        }
+        return expr;
+    }
+
     fn parseOr(self: *Parser) ParseError!Expr {
-        // or             → equality ( OR equality )* ;
+        // OR             → equality ( or equality )* ;
         var expr = try self.parseEquality();
 
         while (self.is(TokenType.OR)) {

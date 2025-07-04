@@ -1,1 +1,3 @@
-print 57 or "true";
+print true and "_true";
+print false and "_false";
+print !"a":
