@@ -103,6 +103,7 @@ pub const SyntaxError = error{
     MissingVarIdentifier,
     MissingExpression,
     MissingRightParen,
+    MissingRightBrace,
     UnexpectedToken,
     InvalidAssignmentTarget,
 };
@@ -163,6 +164,7 @@ pub const Parser = struct {
             error.OutOfMemory => try writer.print("Out of memory.\n", .{}),
             error.UnexpectedToken => try writer.print("[Line {d}] Unexpected token '{s}'\n", .{ current.line, current.lexeme }),
             error.InvalidAssignmentTarget => try writer.print("[Line {d}] Invalid assignment target: '{s}'\n", .{ prevToken.line, prevToken.lexeme }),
+            error.MissingRightBrace => try writer.print("[line {d}] Error at '{s}': Expected '}}'.\n", .{ prevToken.line, prevToken.lexeme }),
         }
     }
 
@@ -211,7 +213,7 @@ pub const Parser = struct {
             const declaration = try self.parseDeclaration();
             try declarations.append(declaration);
         }
-        _ = try self.consume(TokenType.RIGHT_BRACE);
+        _ = self.consume(TokenType.RIGHT_BRACE) catch return ParseError.MissingRightBrace;
 
         return Statement{ .block = Statement.BlockStatement{ .declarations = try declarations.toOwnedSlice() } };
     }
@@ -408,7 +410,7 @@ pub const Parser = struct {
             expr.* = try self.parseExpression();
             const token = self.currentToken();
             if (token.tokenType != scan.TokenType.RIGHT_PAREN) {
-                return ParseError.MissingRightParen;
+                return ParseError.MissingRightBrace;
             }
             self.advance();
             return Expr{ .grouping = Expr.GroupingExpr{ .expression = expr } };
