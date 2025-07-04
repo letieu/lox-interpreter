@@ -1,3 +1,2 @@
-print true and "_true";
-print false and "_false";
-print !"a":
+var foo = 0;
+while (foo < 3) print foo = foo + 1;

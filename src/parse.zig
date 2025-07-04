@@ -6,7 +6,8 @@ const Token = scan.Token;
 
 // program        → declaration* EOF ;
 // declaration    → varDecl | statement ;
-// statement      → ifStmt | exprStmt | printStmt | block ;
+// statement      → while | ifStmt | exprStmt | printStmt | block ;
+// whileStmt      → "while" "(" expression ")" statement
 // ifStmt         → "if" "(" expression ")" statement
 //                ( "else" statement )? ;
 // block          → "{" declaration* "}" ;
@@ -45,14 +46,13 @@ pub const Statement = union(enum) {
     expression: ExpressionStatement,
     block: BlockStatement,
     ifStmt: IfStatement,
+    whileStmt: WhileStatement,
 
     pub const PrintStatement = struct { expr: Expr };
-
     pub const ExpressionStatement = struct { expr: Expr };
-
     pub const BlockStatement = struct { declarations: []Declaration };
-
     pub const IfStatement = struct { condition: Expr, inner: *const Statement, elseStmt: ?*const Statement };
+    pub const WhileStatement = struct { condition: Expr, inner: *const Statement };
 };
 
 pub const Expr = union(enum) {
@@ -202,7 +202,7 @@ pub const Parser = struct {
     }
 
     fn parseStatement(self: *Parser) ParseError!Statement {
-        // statement      → ifStmt | exprStmt | printStmt | block ;
+        // statement      → while | ifStmt | exprStmt | printStmt | block ;
         if (self.is(scan.TokenType.PRINT)) {
             return self.parsePrintStatement();
         }
@@ -212,8 +212,27 @@ pub const Parser = struct {
         if (self.is(scan.TokenType.IF)) {
             return self.parseIfStatement();
         }
+        if (self.is(scan.TokenType.WHILE)) {
+            return self.parseWhileStatement();
+        }
 
         return self.parseExpressionStatement();
+    }
+
+    fn parseWhileStatement(self: *Parser) ParseError!Statement {
+        // whileStmt      → "while" "(" expression ")" statement
+        _ = try self.consume(TokenType.WHILE);
+        _ = self.consume(TokenType.LEFT_PAREN) catch return ParseError.MissingLeftParen;
+        const condition = try self.parseExpression();
+        _ = self.consume(TokenType.RIGHT_PAREN) catch return ParseError.MissingRightParen;
+
+        const inner = try self.alloc.create(Statement);
+        inner.* = try self.parseStatement();
+
+        return Statement{ .whileStmt = Statement.WhileStatement{
+            .condition = condition,
+            .inner = inner,
+        } };
     }
 
     fn parseIfStatement(self: *Parser) ParseError!Statement {
