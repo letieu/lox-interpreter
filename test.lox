@@ -1,5 +1,2 @@
-print clock();
-
-fun abc() {
-  print "okok";
-}
+fun f1(a) { print a; }
+f1(30);

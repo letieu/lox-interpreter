@@ -1,8 +1,12 @@
 const parser = @import("parse.zig");
 const Expr = @import("parse.zig").Expr;
+const Statement = @import("parse.zig").Statement;
 const scan = @import("scan.zig");
 const std = @import("std");
 const TokenType = @import("scan.zig").TokenType;
+const Environment = @import("environment.zig").Environment;
+const Token = @import("scan.zig").Token;
+const Interpreter = @import("interpreter.zig").Intepreter;
 
 pub const EvalResult = union(enum) {
     string: []const u8,
@@ -10,9 +14,25 @@ pub const EvalResult = union(enum) {
     boolean: bool,
     nil,
     native_fn: NativeFunction,
+    user_fn: UserFunction,
 };
 
 pub const NativeFunction = *const fn (args: []const EvalResult) EvalError!EvalResult;
+pub const UserFunction = struct {
+    closure: Environment,
+    body_block: Statement.BlockStatement,
+    params: []Token,
+
+    pub fn call(self: *UserFunction, errorLine: *usize, interpreter: *Interpreter, args: []const Expr) EvalError!EvalResult {
+        var block_env = try Environment.init(interpreter.alloc, &self.closure);
+        for (args, 0..) |arg, i| {
+            const param_token = self.params[i];
+            const evaluatedArg = try evaluate(&arg, errorLine, interpreter);
+            try block_env.define(param_token.lexeme, evaluatedArg);
+        }
+        return interpreter.runBlock(self.body_block, block_env);
+    }
+};
 
 pub const EvalError = error{
     AllocationError,
@@ -22,40 +42,51 @@ pub const EvalError = error{
     OutOfMemory,
 };
 
-pub fn evaluate(expr: *const parser.Expr, errorLine: *usize, comptime envType: type, env: *envType) EvalError!EvalResult {
+pub fn evaluate(expr: *const parser.Expr, errorLine: *usize, interpreter: *Interpreter) EvalError!EvalResult {
     switch (expr.*) {
         .literal => |literal| return try evaluateLiteral(literal),
-        .grouping => |grouping| return try evaluateGrouping(grouping, errorLine, envType, env),
-        .unary => |unary| return try evaluateUnary(unary, errorLine, envType, env),
-        .binary => |binary| return try evaluateBinary(binary, errorLine, envType, env),
-        .identifier => |identifier| return try evaluateIdenfifier(identifier, errorLine, envType, env),
-        .assign => |assign| return try evaluateAssign(assign, errorLine, envType, env),
-        .call => |call| return try evaluateCall(call, errorLine, envType, env),
+        .grouping => |grouping| return try evaluateGrouping(grouping, errorLine, interpreter),
+        .unary => |unary| return try evaluateUnary(unary, errorLine, interpreter),
+        .binary => |binary| return try evaluateBinary(binary, errorLine, interpreter),
+        .identifier => |identifier| return try evaluateIdenfifier(identifier, errorLine, interpreter),
+        .assign => |assign| return try evaluateAssign(assign, errorLine, interpreter),
+        .call => |call| return try evaluateCall(call, errorLine, interpreter),
     }
 }
 
-fn evaluateCall(expr: Expr.CallExpr, errorLine: *usize, comptime envType: type, env: *envType) EvalError!EvalResult {
-    const callee = try evaluate(expr.callee, errorLine, envType, env);
-    const function = callee.native_fn;
-    var evaluatedArgs: [250]EvalResult = undefined;
-    for (expr.args, 0..) |arg, i| {
-        evaluatedArgs[i] = try evaluate(&arg, errorLine, envType, env);
+fn evaluateCall(expr: Expr.CallExpr, errorLine: *usize, interpreter: *Interpreter) EvalError!EvalResult {
+    const callee = try evaluate(expr.callee, errorLine, interpreter);
+    switch (callee) {
+        .native_fn => {
+            const function = callee.native_fn;
+            var evaluatedArgs: [250]EvalResult = undefined;
+            for (expr.args, 0..) |arg, i| {
+                evaluatedArgs[i] = try evaluate(&arg, errorLine, interpreter);
+            }
+            return function(&evaluatedArgs);
+        },
+        .user_fn => {
+            var function = callee.user_fn;
+            return function.call(errorLine, interpreter, expr.args);
+        },
+        else => {
+            return EvalError.Invalid;
+        },
     }
-    return function(&evaluatedArgs);
 }
 
-fn evaluateAssign(expr: Expr.AssignExpr, errorLine: *usize, comptime envType: type, env: *envType) EvalError!EvalResult {
-    const res = try evaluate(expr.left, errorLine, envType, env);
-    env.assign(expr.name.lexeme, res) catch {
+fn evaluateAssign(expr: Expr.AssignExpr, errorLine: *usize, interpreter: *Interpreter) EvalError!EvalResult {
+    const res = try evaluate(expr.left, errorLine, interpreter);
+    interpreter.environment.assign(expr.name.lexeme, res) catch {
         return EvalError.AllocationError;
     };
 
     return res;
 }
 
-fn evaluateIdenfifier(expr: Expr.Identifier, errorLine: *usize, comptime envType: type, env: *envType) EvalError!EvalResult {
+fn evaluateIdenfifier(expr: Expr.Identifier, errorLine: *usize, interpreter: *Interpreter) EvalError!EvalResult {
     const name = expr.token.lexeme;
-    return env.get(name) orelse {
+    return interpreter.environment.get(name) orelse {
         errorLine.* = expr.token.line;
         return EvalError.UndefinedVar;
     };
@@ -71,12 +102,12 @@ fn evaluateLiteral(expr: Expr.LiteralExpr) EvalError!EvalResult {
     }
 }
 
-fn evaluateGrouping(grouping: Expr.GroupingExpr, errorLine: *usize, comptime envType: type, env: *envType) EvalError!EvalResult {
-    return evaluate(grouping.expression, errorLine, envType, env);
+fn evaluateGrouping(grouping: Expr.GroupingExpr, errorLine: *usize, interpreter: *Interpreter) EvalError!EvalResult {
+    return evaluate(grouping.expression, errorLine, interpreter);
 }
 
-fn evaluateUnary(unary: Expr.UnaryExpr, errorLine: *usize, comptime envType: type, env: *envType) EvalError!EvalResult {
-    const right = try evaluate(unary.right, errorLine, envType, env);
+fn evaluateUnary(unary: Expr.UnaryExpr, errorLine: *usize, interpreter: *Interpreter) EvalError!EvalResult {
+    const right = try evaluate(unary.right, errorLine, interpreter);
 
     if (unary.operator.tokenType == TokenType.MINUS) {
         switch (right) {
@@ -100,21 +131,21 @@ fn evaluateUnary(unary: Expr.UnaryExpr, errorLine: *usize, comptime envType: typ
     return EvalError.Invalid;
 }
 
-fn evaluateBinary(binary: Expr.BinaryExpr, errorLine: *usize, comptime envType: type, env: *envType) EvalError!EvalResult {
-    const left = try evaluate(binary.left, errorLine, envType, env);
+fn evaluateBinary(binary: Expr.BinaryExpr, errorLine: *usize, interpreter: *Interpreter) EvalError!EvalResult {
+    const left = try evaluate(binary.left, errorLine, interpreter);
     switch (binary.operator.tokenType) {
         .OR => {
             if (isTruthy(left)) return left;
-            return try evaluate(binary.right, errorLine, envType, env);
+            return try evaluate(binary.right, errorLine, interpreter);
         },
         .AND => {
             if (!isTruthy(left)) return left;
-            return try evaluate(binary.right, errorLine, envType, env);
+            return try evaluate(binary.right, errorLine, interpreter);
         },
         else => {},
     }
 
-    const right = try evaluate(binary.right, errorLine, envType, env);
+    const right = try evaluate(binary.right, errorLine, interpreter);
 
     switch (binary.operator.tokenType) {
         .PLUS => {
@@ -205,5 +236,6 @@ pub fn isTruthy(value: EvalResult) bool {
         .string => return true,
         .nil => return false,
         .native_fn => return true,
+        .user_fn => return true,
     }
 }

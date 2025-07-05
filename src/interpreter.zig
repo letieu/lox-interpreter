@@ -8,12 +8,13 @@ const Environment = @import("environment.zig").Environment;
 const std = @import("std");
 const evaluate = @import("evaluate.zig").evaluate;
 const EvalResult = @import("evaluate.zig").EvalResult;
+const UserFunction = @import("evaluate.zig").UserFunction;
 const EvalError = @import("evaluate.zig").EvalError;
 const isTruthy = @import("evaluate.zig").isTruthy;
 
 fn nativeClock(_: []const EvalResult) EvalError!EvalResult {
     const now_ns = std.time.timestamp();
-    return EvalResult{ .number = @floatFromInt(now_ns) };
+    return EvalResult{ .number = @floatFromInt(now_ns - 2) };
 }
 
 pub const Intepreter = struct {
@@ -48,6 +49,18 @@ pub const Intepreter = struct {
         for (self.declarations) |decl| {
             try self.execDecl(decl);
         }
+    }
+
+    pub fn runBlock(self: *Intepreter, block: Statement.BlockStatement, env: Environment) EvalError!EvalResult {
+        const prevEnv = self.environment;
+        self.environment = env;
+
+        for (block.declarations) |decl| {
+            _ = try self.execDecl(decl);
+        }
+
+        self.environment = prevEnv;
+        return EvalResult.nil;
     }
 
     fn execDecl(self: *Intepreter, decl: Declaration) EvalError!void {
@@ -131,6 +144,7 @@ pub const Intepreter = struct {
 
         switch (result) {
             .native_fn => self.printOut("hihi", .{}),
+            .user_fn => self.printOut("<fn {s}>", .{stmt.expr.identifier.token.lexeme}),
             .boolean => self.printOut("{?}", .{result.boolean}),
             .number => self.printOut("{d}", .{result.number}),
             .string => self.printOut("{s}", .{result.string}),
@@ -141,8 +155,13 @@ pub const Intepreter = struct {
     }
 
     fn execFunDecl(self: *Intepreter, decl: FunctionDecl) !void {
-        _ = self; // autofix
-        _ = decl; // autofix
+        const user_fn = UserFunction{
+            .closure = self.environment,
+            .body_block = decl.function.body,
+            .params = decl.function.params,
+        };
+
+        try self.environment.define(decl.function.name, EvalResult{ .user_fn = user_fn });
     }
 
     fn execVarDecl(self: *Intepreter, decl: VarDecl) !void {
@@ -158,7 +177,7 @@ pub const Intepreter = struct {
 
     fn execExpr(self: *Intepreter, expr: Expr) !EvalResult {
         var errorLine: usize = 0;
-        return evaluate(&expr, &errorLine, @TypeOf(self.environment), &self.environment) catch |e| {
+        return evaluate(&expr, &errorLine, self) catch |e| {
             self.printEvalError(e, &errorLine) catch {
                 std.debug.print("print error", .{});
             };
