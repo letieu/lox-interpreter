@@ -5,14 +5,17 @@ const TokenType = scan.TokenType;
 const Token = scan.Token;
 
 // program        → declaration* EOF ;
-// declaration    → varDecl | statement ;
+// declaration    → functionDecl | varDecl | statement ;
+// functionDecl   → "fun" function ;
+// function       → IDENTIFIER "(" paramaters? ")" block ;
+// paramaters     → IDENTIFIER (, IDENTIFIER)* ;
+// varDecl        → "var" IDENTIFIER ( "=" expression)? ";" ;
 // statement      → forStmt | whileStmt | ifStmt | exprStmt | printStmt | block ;
 // forStmt        → "for" "(" declaration ";" expression ";"  expression? ")" statement ;
 // whileStmt      → "while" "(" expression ")" statement
 // ifStmt         → "if" "(" expression ")" statement
 //                ( "else" statement )? ;
 // block          → "{" declaration* "}" ;
-// varDecl        → "var" IDENTIFIER ( "=" expression)? ";" ;
 // printStmt      → "print" expression ";" ;
 // exprStmt       → expression ";" ;
 // expression     → assignment ;
@@ -35,13 +38,23 @@ const Token = scan.Token;
 pub const Declaration = union(enum) {
     var_decl: VarDecl,
     stmt: Statement,
-    // function_decl: FunctionDecl,
+    function_decl: FunctionDecl,
     // class_decl: ClassDecl,
 };
 
 pub const VarDecl = struct {
     name: []const u8,
     initializer: ?Expr,
+};
+
+pub const FunctionDecl = struct {
+    function: Function,
+};
+
+pub const Function = struct {
+    name: []const u8,
+    params: []Token,
+    body: Statement.BlockStatement,
 };
 
 pub const Statement = union(enum) {
@@ -205,12 +218,53 @@ pub const Parser = struct {
     }
 
     fn parseDeclaration(self: *Parser) ParseError!Declaration {
-        // declaration    → varDecl | statement ;
+        // declaration    → functionDecl | varDecl | statement ;
         if (self.is(scan.TokenType.VAR)) {
             return Declaration{ .var_decl = try self.parseVarDecl() };
         }
+        if (self.is(scan.TokenType.FUN)) {
+            return Declaration{ .function_decl = try self.parseFunctionDecl() };
+        }
 
         return Declaration{ .stmt = try self.parseStatement() };
+    }
+
+    fn parseFunctionDecl(self: *Parser) ParseError!FunctionDecl {
+        // functionDecl   → "fun" function ;
+        _ = try self.consume(TokenType.FUN);
+        const function = try self.parseFunction();
+        return FunctionDecl{
+            .function = function,
+        };
+    }
+
+    fn parseFunction(self: *Parser) ParseError!Function {
+        // function       → IDENTIFIER "(" paramaters? ")" block ;
+        const identifier = try self.consume(TokenType.IDENTIFIER);
+        _ = try self.consume(TokenType.LEFT_PAREN);
+        const params = try self.parseFnParams();
+        _ = try self.consume(TokenType.RIGHT_PAREN);
+        const block = try self.parseBlockStatement();
+
+        return Function{
+            .name = identifier.lexeme,
+            .params = params,
+            .body = block.block,
+        };
+    }
+
+    fn parseFnParams(self: *Parser) ParseError![]Token {
+        // paramaters     → IDENTIFIER (, IDENTIFIER)* ;
+        var params = std.ArrayList(Token).init(self.alloc);
+        while (self.is(TokenType.IDENTIFIER)) {
+            const param = try self.consume(TokenType.IDENTIFIER);
+            try params.append(param);
+            if (self.is(TokenType.COMMA)) {
+                _ = try self.consume(TokenType.COMMA);
+            }
+        }
+
+        return params.toOwnedSlice();
     }
 
     fn parseStatement(self: *Parser) ParseError!Statement {

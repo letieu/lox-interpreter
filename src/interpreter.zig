@@ -2,6 +2,7 @@ const Statement = @import("parse.zig").Statement;
 const Expr = @import("parse.zig").Expr;
 const Declaration = @import("parse.zig").Declaration;
 const VarDecl = @import("parse.zig").VarDecl;
+const FunctionDecl = @import("parse.zig").FunctionDecl;
 const Environment = @import("environment.zig").Environment;
 
 const std = @import("std");
@@ -51,7 +52,8 @@ pub const Intepreter = struct {
 
     fn execDecl(self: *Intepreter, decl: Declaration) EvalError!void {
         switch (decl) {
-            .var_decl => |varDeclaration| try self.execVarDecl(varDeclaration),
+            .var_decl => |var_declaration| try self.execVarDecl(var_declaration),
+            .function_decl => |fun_decl| try self.execFunDecl(fun_decl),
             .stmt => |exprStmt| {
                 _ = try self.execStmt(exprStmt);
             },
@@ -136,6 +138,11 @@ pub const Intepreter = struct {
         }
 
         self.printOut("\n", .{});
+    }
+
+    fn execFunDecl(self: *Intepreter, decl: FunctionDecl) !void {
+        _ = self; // autofix
+        _ = decl; // autofix
     }
 
     fn execVarDecl(self: *Intepreter, decl: VarDecl) !void {

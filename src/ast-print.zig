@@ -25,6 +25,7 @@ pub const AstPrinter = struct {
     pub fn printDeclaration(self: *const AstPrinter, declaration: *const parser.Declaration) PrintError!void {
         switch (declaration.*) {
             .var_decl => |var_decl| try self.printVarDeclaration(var_decl),
+            .function_decl => |fun_decl| try self.printFunDeclaration(fun_decl),
             .stmt => |stmt| try self.printStatement(&stmt),
         }
         try self.write("\n", .{});
@@ -64,6 +65,11 @@ pub const AstPrinter = struct {
         try self.write("(if ", .{});
         try self.printExpression(&stmt.condition);
         try self.printStatement(stmt.inner);
+        try self.write(")", .{});
+    }
+
+    pub fn printFunDeclaration(self: *const AstPrinter, fun_decl: parser.FunctionDecl) PrintError!void {
+        try self.write("(fun {s} ", .{fun_decl.function.name});
         try self.write(")", .{});
     }
 
