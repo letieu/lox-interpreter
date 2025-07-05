@@ -10,6 +10,11 @@ const EvalResult = @import("evaluate.zig").EvalResult;
 const EvalError = @import("evaluate.zig").EvalError;
 const isTruthy = @import("evaluate.zig").isTruthy;
 
+fn nativeClock(_: []const EvalResult) EvalError!EvalResult {
+    const now_ns = std.time.timestamp();
+    return EvalResult{ .number = @floatFromInt(now_ns) };
+}
+
 pub const Intepreter = struct {
     declarations: []const Declaration,
     alloc: std.mem.Allocator,
@@ -19,7 +24,7 @@ pub const Intepreter = struct {
     environment: Environment,
 
     pub fn init(statements: []const Declaration, alloc: std.mem.Allocator, stdOut: std.fs.File, stdErr: std.fs.File) Intepreter {
-        return Intepreter{
+        var interpreter = Intepreter{
             .declarations = statements,
             .alloc = alloc,
             .stdOut = stdOut,
@@ -28,6 +33,14 @@ pub const Intepreter = struct {
                 std.debug.print("Failed to init environment", .{});
             },
         };
+        interpreter.initNativeFn() catch {
+            std.debug.print("Failed to init environment var", .{});
+        };
+        return interpreter;
+    }
+
+    fn initNativeFn(self: *Intepreter) !void {
+        try self.environment.define("clock", EvalResult{ .native_fn = nativeClock });
     }
 
     pub fn run(self: *Intepreter) !void {
@@ -115,6 +128,7 @@ pub const Intepreter = struct {
         const result = try self.execExpr(stmt.expr);
 
         switch (result) {
+            .native_fn => self.printOut("hihi", .{}),
             .boolean => self.printOut("{?}", .{result.boolean}),
             .number => self.printOut("{d}", .{result.number}),
             .string => self.printOut("{s}", .{result.string}),

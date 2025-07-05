@@ -17,10 +17,7 @@ fn doHi(comptime T: type, person: T) !void {
 }
 
 pub fn main() !void {
-    const a = 1;
-    var b: usize = a;
-    
-    b = 3;
-    std.debug.print("a {d} \n", .{a});
-    std.debug.print("b {d} \n", .{b});
+    var sl: [3]usize = undefined;
+    sl[1] = 3;
+    std.debug.print("{d}", .{sl.len});
 }

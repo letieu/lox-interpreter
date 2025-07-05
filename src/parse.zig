@@ -24,8 +24,10 @@ const Token = scan.Token;
 // comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
 // term           → factor ( ( "-" | "+" ) factor )* ;
 // factor         → unary ( ( "/" | "*" ) unary )* ;
-// unary      → ( "!" | "-" ) unary
+// unary          → ( "!" | "-" ) unary
 //                | primary ;
+// call           → primary ( "(" arguments? ")" )* ;
+// arguments      → expression ( "," expression )* ;
 // primary        → NUMBER | STRING | "true" | "false" | "nil"
 //                | "(" expression ")"
 //                | IDENTIFIER;
@@ -65,6 +67,7 @@ pub const Expr = union(enum) {
     unary: UnaryExpr,
     binary: BinaryExpr,
     grouping: GroupingExpr,
+    call: CallExpr,
 
     pub const LiteralType = enum {
         NUMBER,
@@ -104,6 +107,12 @@ pub const Expr = union(enum) {
 
     pub const GroupingExpr = struct {
         expression: *Expr,
+    };
+
+    pub const CallExpr = struct {
+        callee: *Expr,
+        paren: Token,
+        args: []const Expr,
     };
 };
 
@@ -512,7 +521,37 @@ pub const Parser = struct {
             return Expr{ .unary = Expr.UnaryExpr{ .operator = operator, .right = right } };
         }
 
-        return self.parsePrimary();
+        return self.parseCall();
+    }
+
+    fn parseCall(self: *Parser) ParseError!Expr {
+        var expr = try self.parsePrimary();
+
+        while (self.is(TokenType.LEFT_PAREN)) {
+            _ = try self.consume(TokenType.LEFT_PAREN);
+            var args = std.ArrayList(Expr).init(self.alloc);
+
+            while (!self.is(TokenType.RIGHT_PAREN)) {
+                const arg = try self.parseExpression();
+                try args.append(arg);
+
+                if (!self.is(TokenType.RIGHT_PAREN)) {
+                    _ = try self.consume(TokenType.COMMA);
+                }
+            }
+
+            const callee = try self.alloc.create(Expr);
+            callee.* = expr;
+            const paren = try self.consume(TokenType.RIGHT_PAREN);
+
+            expr = Expr{ .call = Expr.CallExpr{
+                .callee = callee,
+                .paren = paren,
+                .args = try args.toOwnedSlice(),
+            } };
+        }
+
+        return expr;
     }
 
     fn parsePrimary(self: *Parser) ParseError!Expr {

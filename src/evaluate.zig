@@ -4,19 +4,15 @@ const scan = @import("scan.zig");
 const std = @import("std");
 const TokenType = @import("scan.zig").TokenType;
 
-pub const EvalResultType = enum {
-    string,
-    number,
-    boolean,
-    nil,
-};
-
-pub const EvalResult = union(EvalResultType) {
+pub const EvalResult = union(enum) {
     string: []const u8,
     number: f64,
     boolean: bool,
     nil,
+    native_fn: NativeFunction,
 };
+
+pub const NativeFunction = *const fn (args: []const EvalResult) EvalError!EvalResult;
 
 pub const EvalError = error{
     AllocationError,
@@ -34,7 +30,18 @@ pub fn evaluate(expr: *const parser.Expr, errorLine: *usize, comptime envType: t
         .binary => |binary| return try evaluateBinary(binary, errorLine, envType, env),
         .identifier => |identifier| return try evaluateIdenfifier(identifier, errorLine, envType, env),
         .assign => |assign| return try evaluateAssign(assign, errorLine, envType, env),
+        .call => |call| return try evaluateCall(call, errorLine, envType, env),
     }
+}
+
+fn evaluateCall(expr: Expr.CallExpr, errorLine: *usize, comptime envType: type, env: *envType) EvalError!EvalResult {
+    const callee = try evaluate(expr.callee, errorLine, envType, env);
+    const function = callee.native_fn;
+    var evaluatedArgs: [250]EvalResult = undefined;
+    for (expr.args, 0..) |arg, i| {
+        evaluatedArgs[i] = try evaluate(&arg, errorLine, envType, env);
+    }
+    return function(&evaluatedArgs);
 }
 
 fn evaluateAssign(expr: Expr.AssignExpr, errorLine: *usize, comptime envType: type, env: *envType) EvalError!EvalResult {
@@ -197,5 +204,6 @@ pub fn isTruthy(value: EvalResult) bool {
         .number => return value.number != 0,
         .string => return true,
         .nil => return false,
+        .native_fn => return true,
     }
 }

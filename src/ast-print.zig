@@ -96,7 +96,18 @@ pub const AstPrinter = struct {
             .grouping => |group| try self.printGrouping(group),
             .identifier => |identifier| try self.printIdentifier(identifier),
             .assign => |assign| try self.printAssign(assign),
+            .call => |call| try self.printCall(call),
         }
+    }
+
+    pub fn printCall(self: *const AstPrinter, call: Expr.CallExpr) PrintError!void {
+        try self.write("(call ", .{});
+        try self.printExpression(call.callee);
+        try self.write(" ", .{});
+        for (call.args) |arg| {
+            try self.printExpression(&arg);
+        }
+        try self.write(" )", .{});
     }
 
     pub fn printAssign(self: *const AstPrinter, expr: Expr.AssignExpr) PrintError!void {
