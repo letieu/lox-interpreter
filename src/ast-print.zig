@@ -36,9 +36,21 @@ pub const AstPrinter = struct {
             .print => |printStmt| try self.printPrint(&printStmt.expr),
             .block => |block| try self.printBlockStmt(block),
             .ifStmt => |ifStmt| try self.printIfStmt(ifStmt),
-            .whileStmt => |whileStmt| try self.printWhileStmt(whileStmt),
+            .while_stmt => |while_stmt| try self.printWhileStmt(while_stmt),
+            .for_stmt => |for_stmt| try self.printForStmt(for_stmt),
         }
         try self.write("\n", .{});
+    }
+
+    pub fn printForStmt(self: *const AstPrinter, stmt: parser.Statement.ForStatement) PrintError!void {
+        try self.write("(for ", .{});
+        if (stmt.initial != null) {
+            const decl = stmt.initial.?;
+            try self.printDeclaration(decl);
+        }
+        try self.printExpression(&stmt.condition);
+        try self.printStatement(stmt.body);
+        try self.write(")", .{});
     }
 
     pub fn printWhileStmt(self: *const AstPrinter, stmt: parser.Statement.WhileStatement) PrintError!void {

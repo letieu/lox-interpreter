@@ -17,11 +17,10 @@ fn doHi(comptime T: type, person: T) !void {
 }
 
 pub fn main() !void {
-    var a: usize = 1;
-    var tmp = a;
-    const b: *usize = &tmp;
-    a = 5;
+    const a = 1;
+    var b: usize = a;
     
+    b = 3;
     std.debug.print("a {d} \n", .{a});
-    std.debug.print("b {d} \n", .{b.*});
+    std.debug.print("b {d} \n", .{b});
 }

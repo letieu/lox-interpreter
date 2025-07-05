@@ -50,9 +50,10 @@ pub const Intepreter = struct {
             .block => |blockStmt| try self.execBlock(blockStmt),
             .print => |printStmt| try self.execPrint(printStmt),
             .ifStmt => |ifStmt| try self.execIfStmt(ifStmt),
-            .whileStmt => |whileStmt| try self.execWhileStmt(whileStmt),
-            .expression => |exprStmt| {
-                _ = try self.execExpr(exprStmt.expr);
+            .while_stmt => |while_stmt| try self.execWhileStmt(while_stmt),
+            .for_stmt => |for_stmt| try self.execForStmt(for_stmt),
+            .expression => |expr_stmt| {
+                _ = try self.execExpr(expr_stmt.expr);
             },
         }
     }
@@ -78,6 +79,18 @@ pub const Intepreter = struct {
             error.OutOfMemory => self.printErr("OutOfMemory.\n", .{}),
         }
         self.printErr("[line {d}]", .{errorLine.*});
+    }
+
+    fn execForStmt(self: *Intepreter, stmt: Statement.ForStatement) !void {
+        if (stmt.initial != null) {
+            try self.execDecl(stmt.initial.?.*);
+        }
+        while (isTruthy(try self.execExpr(stmt.condition))) {
+            try self.execStmt(stmt.body.*);
+            if (stmt.increment != null) {
+                _ = try self.execExpr(stmt.increment.?);
+            }
+        }
     }
 
     fn execWhileStmt(self: *Intepreter, stmt: Statement.WhileStatement) !void {

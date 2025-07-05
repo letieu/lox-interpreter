@@ -6,14 +6,15 @@ const Token = scan.Token;
 
 // program        → declaration* EOF ;
 // declaration    → varDecl | statement ;
-// statement      → while | ifStmt | exprStmt | printStmt | block ;
+// statement      → forStmt | whileStmt | ifStmt | exprStmt | printStmt | block ;
+// forStmt        → "for" "(" declaration ";" expression ";"  expression? ")" statement ;
 // whileStmt      → "while" "(" expression ")" statement
 // ifStmt         → "if" "(" expression ")" statement
 //                ( "else" statement )? ;
 // block          → "{" declaration* "}" ;
-// exprStmt       → expression ";" ;
 // varDecl        → "var" IDENTIFIER ( "=" expression)? ";" ;
 // printStmt      → "print" expression ";" ;
+// exprStmt       → expression ";" ;
 // expression     → assignment ;
 // assignment     → IDENTIFIER "=" assignment
 //                  | AND ;
@@ -46,13 +47,15 @@ pub const Statement = union(enum) {
     expression: ExpressionStatement,
     block: BlockStatement,
     ifStmt: IfStatement,
-    whileStmt: WhileStatement,
+    while_stmt: WhileStatement,
+    for_stmt: ForStatement,
 
     pub const PrintStatement = struct { expr: Expr };
     pub const ExpressionStatement = struct { expr: Expr };
     pub const BlockStatement = struct { declarations: []Declaration };
     pub const IfStatement = struct { condition: Expr, inner: *const Statement, elseStmt: ?*const Statement };
     pub const WhileStatement = struct { condition: Expr, inner: *const Statement };
+    pub const ForStatement = struct { initial: ?*const Declaration, condition: Expr, increment: ?Expr, body: *const Statement };
 };
 
 pub const Expr = union(enum) {
@@ -215,8 +218,49 @@ pub const Parser = struct {
         if (self.is(scan.TokenType.WHILE)) {
             return self.parseWhileStatement();
         }
+        if (self.is(scan.TokenType.FOR)) {
+            return self.parseForStatement();
+        }
 
         return self.parseExpressionStatement();
+    }
+
+    fn parseForStatement(self: *Parser) ParseError!Statement {
+        // forStmt        → "for" "(" declaration ";" expression ";"  expression? ")" statement ;
+        _ = try self.consume(TokenType.FOR);
+        _ = self.consume(TokenType.LEFT_PAREN) catch return ParseError.MissingLeftParen;
+
+        // initial
+        var init_decl: ?*Declaration = null;
+        if (self.is(TokenType.SEMICOLON)) {
+            _ = try self.consume(TokenType.SEMICOLON);
+        } else {
+            init_decl = try self.alloc.create(Declaration);
+            init_decl.?.* = try self.parseDeclaration();
+        }
+
+        // condition
+        const condition = try self.parseExpression();
+        _ = try self.consume(TokenType.SEMICOLON);
+
+        // increment
+        var increment: ?Expr = null;
+        if (!self.is(TokenType.RIGHT_PAREN)) {
+            increment = try self.parseExpression();
+        }
+
+        _ = self.consume(TokenType.RIGHT_PAREN) catch return ParseError.MissingRightParen;
+
+        // body
+        const body = try self.alloc.create(Statement);
+        body.* = try self.parseStatement();
+
+        return Statement{ .for_stmt = Statement.ForStatement{
+            .initial = init_decl,
+            .condition = condition,
+            .increment = increment,
+            .body = body,
+        } };
     }
 
     fn parseWhileStatement(self: *Parser) ParseError!Statement {
@@ -229,7 +273,7 @@ pub const Parser = struct {
         const inner = try self.alloc.create(Statement);
         inner.* = try self.parseStatement();
 
-        return Statement{ .whileStmt = Statement.WhileStatement{
+        return Statement{ .while_stmt = Statement.WhileStatement{
             .condition = condition,
             .inner = inner,
         } };
