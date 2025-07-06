@@ -25,6 +25,10 @@ pub const UserFunction = struct {
 
     pub fn call(self: *UserFunction, errorLine: *usize, interpreter: *Interpreter, args: []const Expr) EvalError!EvalResult {
         var block_env = try Environment.init(interpreter.alloc, &self.closure);
+        if (args.len != self.params.len) {
+            return EvalError.WrongArgsCount;
+        }
+
         for (args, 0..) |arg, i| {
             const param_token = self.params[i];
             const evaluatedArg = try evaluate(&arg, errorLine, interpreter);
@@ -40,6 +44,7 @@ pub const EvalError = error{
     NotANumber,
     UndefinedVar,
     OutOfMemory,
+    WrongArgsCount,
 };
 
 pub fn evaluate(expr: *const parser.Expr, errorLine: *usize, interpreter: *Interpreter) EvalError!EvalResult {

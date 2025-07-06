@@ -140,6 +140,7 @@ pub const Intepreter = struct {
             error.Invalid => self.printErr("Invalid.\n", .{}),
             error.UndefinedVar => self.printErr("Undefined var.\n", .{}),
             error.OutOfMemory => self.printErr("OutOfMemory.\n", .{}),
+            error.WrongArgsCount => self.printErr("Not enough args.\n", .{}),
         }
         self.printErr("[line {d}]", .{errorLine.*});
     }
