@@ -80,6 +80,7 @@ pub const Intepreter = struct {
             .ifStmt => |ifStmt| try self.execIfStmt(ifStmt),
             .while_stmt => |while_stmt| try self.execWhileStmt(while_stmt),
             .for_stmt => |for_stmt| try self.execForStmt(for_stmt),
+            .return_stmt => |return_stmt| try self.execReturnStmt(return_stmt),
             .expression => |expr_stmt| {
                 _ = try self.execExpr(expr_stmt.expr);
             },
@@ -107,6 +108,11 @@ pub const Intepreter = struct {
             error.OutOfMemory => self.printErr("OutOfMemory.\n", .{}),
         }
         self.printErr("[line {d}]", .{errorLine.*});
+    }
+
+    fn execReturnStmt(self: *Intepreter, stmt: Statement.ReturnStatement) !void {
+        _ = self; // autofix
+        _ = stmt; // autofix
     }
 
     fn execForStmt(self: *Intepreter, stmt: Statement.ForStatement) !void {

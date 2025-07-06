@@ -39,8 +39,17 @@ pub const AstPrinter = struct {
             .ifStmt => |ifStmt| try self.printIfStmt(ifStmt),
             .while_stmt => |while_stmt| try self.printWhileStmt(while_stmt),
             .for_stmt => |for_stmt| try self.printForStmt(for_stmt),
+            .return_stmt => |return_stmt| try self.printReturnStmt(return_stmt),
         }
         try self.write("\n", .{});
+    }
+
+    pub fn printReturnStmt(self: *const AstPrinter, stmt: parser.Statement.ReturnStatement) PrintError!void {
+        try self.write("(return ", .{});
+        if (stmt.expr != null) {
+            try self.printExpression(&stmt.expr.?);
+        }
+        try self.write(" )", .{});
     }
 
     pub fn printForStmt(self: *const AstPrinter, stmt: parser.Statement.ForStatement) PrintError!void {
@@ -70,6 +79,7 @@ pub const AstPrinter = struct {
 
     pub fn printFunDeclaration(self: *const AstPrinter, fun_decl: parser.FunctionDecl) PrintError!void {
         try self.write("(fun {s} ", .{fun_decl.function.name});
+        try self.printBlockStmt(fun_decl.function.body);
         try self.write(")", .{});
     }
 

@@ -10,7 +10,8 @@ const Token = scan.Token;
 // function       → IDENTIFIER "(" paramaters? ")" block ;
 // paramaters     → IDENTIFIER (, IDENTIFIER)* ;
 // varDecl        → "var" IDENTIFIER ( "=" expression)? ";" ;
-// statement      → forStmt | whileStmt | ifStmt | exprStmt | printStmt | block ;
+// statement      → returnStmt | forStmt | whileStmt | ifStmt | exprStmt | printStmt | block ;
+// returnStmt     → "return" expression? ";" ;
 // forStmt        → "for" "(" declaration ";" expression ";"  expression? ")" statement ;
 // whileStmt      → "while" "(" expression ")" statement
 // ifStmt         → "if" "(" expression ")" statement
@@ -64,6 +65,7 @@ pub const Statement = union(enum) {
     ifStmt: IfStatement,
     while_stmt: WhileStatement,
     for_stmt: ForStatement,
+    return_stmt: ReturnStatement,
 
     pub const PrintStatement = struct { expr: Expr };
     pub const ExpressionStatement = struct { expr: Expr };
@@ -71,6 +73,7 @@ pub const Statement = union(enum) {
     pub const IfStatement = struct { condition: Expr, inner: *const Statement, elseStmt: ?*const Statement };
     pub const WhileStatement = struct { condition: Expr, inner: *const Statement };
     pub const ForStatement = struct { initial: ?*const Declaration, condition: Expr, increment: ?Expr, body: *const Statement };
+    pub const ReturnStatement = struct { expr: ?Expr };
 };
 
 pub const Expr = union(enum) {
@@ -259,7 +262,7 @@ pub const Parser = struct {
         while (self.is(TokenType.IDENTIFIER)) {
             const param = try self.consume(TokenType.IDENTIFIER);
             try params.append(param);
-            if (self.is(TokenType.COMMA)) {
+            if (!self.is(TokenType.RIGHT_PAREN)) {
                 _ = try self.consume(TokenType.COMMA);
             }
         }
@@ -284,8 +287,18 @@ pub const Parser = struct {
         if (self.is(scan.TokenType.FOR)) {
             return self.parseForStatement();
         }
+        if (self.is(scan.TokenType.RETURN)) {
+            return self.parseReturnStatement();
+        }
 
         return self.parseExpressionStatement();
+    }
+
+    fn parseReturnStatement(self: *Parser) ParseError!Statement {
+        _ = try self.consume(TokenType.RETURN);
+        const expr = self.parseExpression() catch null;
+        _ = try self.consume(TokenType.SEMICOLON);
+        return Statement{ .return_stmt = Statement.ReturnStatement{ .expr = expr } };
     }
 
     fn parseForStatement(self: *Parser) ParseError!Statement {
