@@ -1,3 +1,7 @@
 fun foo(a, b, c, d, e, f) {
-  return;
+  return "BBB";
 }
+
+var b = foo();
+
+print(b);

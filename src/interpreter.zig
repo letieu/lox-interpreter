@@ -12,6 +12,11 @@ const UserFunction = @import("evaluate.zig").UserFunction;
 const EvalError = @import("evaluate.zig").EvalError;
 const isTruthy = @import("evaluate.zig").isTruthy;
 
+const StmtResult = union(enum) {
+    none,
+    return_value: EvalResult,
+};
+
 fn nativeClock(_: []const EvalResult) EvalError!EvalResult {
     const now_ns = std.time.timestamp();
     return EvalResult{ .number = @floatFromInt(now_ns - 2) };
@@ -47,7 +52,7 @@ pub const Intepreter = struct {
 
     pub fn run(self: *Intepreter) !void {
         for (self.declarations) |decl| {
-            try self.execDecl(decl);
+            _ = try self.execDecl(decl);
         }
     }
 
@@ -56,47 +61,76 @@ pub const Intepreter = struct {
         self.environment = env;
 
         for (block.declarations) |decl| {
-            _ = try self.execDecl(decl);
+            const result = try self.execDecl(decl);
+            if (result == .return_value) {
+                self.environment = prevEnv;
+                return result.return_value;
+            }
         }
 
         self.environment = prevEnv;
         return EvalResult.nil;
     }
 
-    fn execDecl(self: *Intepreter, decl: Declaration) EvalError!void {
+    fn execDecl(self: *Intepreter, decl: Declaration) EvalError!StmtResult {
         switch (decl) {
-            .var_decl => |var_declaration| try self.execVarDecl(var_declaration),
-            .function_decl => |fun_decl| try self.execFunDecl(fun_decl),
+            .var_decl => |var_declaration| {
+                try self.execVarDecl(var_declaration);
+                return StmtResult.none;
+            },
+            .function_decl => |fun_decl| {
+                try self.execFunDecl(fun_decl);
+                return StmtResult.none;
+            },
             .stmt => |exprStmt| {
-                _ = try self.execStmt(exprStmt);
+                return try self.execStmt(exprStmt);
             },
         }
     }
 
-    fn execStmt(self: *Intepreter, stmt: Statement) EvalError!void {
+    fn execStmt(self: *Intepreter, stmt: Statement) EvalError!StmtResult {
         switch (stmt) {
-            .block => |blockStmt| try self.execBlock(blockStmt),
-            .print => |printStmt| try self.execPrint(printStmt),
-            .ifStmt => |ifStmt| try self.execIfStmt(ifStmt),
-            .while_stmt => |while_stmt| try self.execWhileStmt(while_stmt),
-            .for_stmt => |for_stmt| try self.execForStmt(for_stmt),
-            .return_stmt => |return_stmt| try self.execReturnStmt(return_stmt),
+            .block => |blockStmt| {
+                return self.execBlock(blockStmt);
+            },
+            .print => |printStmt| {
+                try self.execPrint(printStmt);
+                return .none;
+            },
+            .ifStmt => |ifStmt| {
+                return self.execIfStmt(ifStmt);
+            },
+            .while_stmt => |while_stmt| {
+                return self.execWhileStmt(while_stmt);
+            },
+            .for_stmt => |for_stmt| {
+                return self.execForStmt(for_stmt);
+            },
+            .return_stmt => |return_stmt| {
+                return try self.execReturnStmt(return_stmt);
+            },
             .expression => |expr_stmt| {
                 _ = try self.execExpr(expr_stmt.expr);
+                return .none;
             },
         }
     }
 
-    fn execBlock(self: *Intepreter, block: Statement.BlockStatement) !void {
+    fn execBlock(self: *Intepreter, block: Statement.BlockStatement) !StmtResult {
         var prevEnv = self.environment;
         const blockEnv = try Environment.init(self.alloc, &prevEnv);
         self.environment = blockEnv;
 
         for (block.declarations) |decl| {
-            _ = try self.execDecl(decl);
+            const result = try self.execDecl(decl);
+            if (result == .return_value) {
+                self.environment = prevEnv;
+                return result;
+            }
         }
 
         self.environment = prevEnv;
+        return .none;
     }
 
     fn printEvalError(self: *Intepreter, e: EvalError, errorLine: *const usize) !void {
@@ -110,39 +144,54 @@ pub const Intepreter = struct {
         self.printErr("[line {d}]", .{errorLine.*});
     }
 
-    fn execReturnStmt(self: *Intepreter, stmt: Statement.ReturnStatement) !void {
-        _ = self; // autofix
-        _ = stmt; // autofix
+    fn execReturnStmt(self: *Intepreter, stmt: Statement.ReturnStatement) !StmtResult {
+        if (stmt.expr != null) {
+            const result = try self.execExpr(stmt.expr.?);
+            return StmtResult{ .return_value = result };
+        }
+
+        return StmtResult{ .return_value = EvalResult.nil };
     }
 
-    fn execForStmt(self: *Intepreter, stmt: Statement.ForStatement) !void {
+    fn execForStmt(self: *Intepreter, stmt: Statement.ForStatement) !StmtResult {
         if (stmt.initial != null) {
-            try self.execDecl(stmt.initial.?.*);
+            _ = try self.execDecl(stmt.initial.?.*);
         }
         while (isTruthy(try self.execExpr(stmt.condition))) {
-            try self.execStmt(stmt.body.*);
+            const result = try self.execStmt(stmt.body.*);
+            if (result == .return_value) return result;
+
             if (stmt.increment != null) {
                 _ = try self.execExpr(stmt.increment.?);
             }
         }
+
+        return .none;
     }
 
-    fn execWhileStmt(self: *Intepreter, stmt: Statement.WhileStatement) !void {
+    fn execWhileStmt(self: *Intepreter, stmt: Statement.WhileStatement) !StmtResult {
         while (isTruthy(try self.execExpr(stmt.condition))) {
-            try self.execStmt(stmt.inner.*);
+            const result = try self.execStmt(stmt.inner.*);
+            if (result == .return_value) {
+                return result;
+            }
         }
+
+        return .none;
     }
 
-    fn execIfStmt(self: *Intepreter, stmt: Statement.IfStatement) !void {
+    fn execIfStmt(self: *Intepreter, stmt: Statement.IfStatement) !StmtResult {
         const conditional_result = try self.execExpr(stmt.condition);
 
         if (isTruthy(conditional_result)) {
-            try self.execStmt(stmt.inner.*);
+            return try self.execStmt(stmt.inner.*);
         } else {
             if (stmt.elseStmt != null) {
-                try self.execStmt(stmt.elseStmt.?.*);
+                return try self.execStmt(stmt.elseStmt.?.*);
             }
         }
+
+        return .none;
     }
 
     fn execPrint(self: *Intepreter, stmt: Statement.PrintStatement) !void {
