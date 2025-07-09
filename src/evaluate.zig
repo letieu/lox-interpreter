@@ -19,22 +19,23 @@ pub const EvalResult = union(enum) {
 
 pub const NativeFunction = *const fn (args: []const EvalResult) EvalError!EvalResult;
 pub const UserFunction = struct {
-    closure: Environment,
+    closure: *Environment,
     body_block: Statement.BlockStatement,
     params: []Token,
 
-    pub fn call(self: *UserFunction, errorLine: *usize, interpreter: *Interpreter, args: []const Expr) EvalError!EvalResult {
-        var block_env = try Environment.init(interpreter.alloc, &self.closure);
+    pub fn call(self: *UserFunction, errorLine: *usize, interpreter: *Interpreter, args: []*Expr) EvalError!EvalResult {
+        var block_env = try Environment.init(interpreter.alloc, self.closure);
+
         if (args.len != self.params.len) {
             return EvalError.WrongArgsCount;
         }
 
         for (args, 0..) |arg, i| {
             const param_token = self.params[i];
-            const evaluatedArg = try evaluate(&arg, errorLine, interpreter);
+            const evaluatedArg = try evaluate(arg, errorLine, interpreter);
             try block_env.define(param_token.lexeme, evaluatedArg);
         }
-        return interpreter.runBlock(self.body_block, block_env);
+        return interpreter.runBlock(&self.body_block, block_env);
     }
 };
 
@@ -47,15 +48,15 @@ pub const EvalError = error{
     WrongArgsCount,
 };
 
-pub fn evaluate(expr: *const parser.Expr, errorLine: *usize, interpreter: *Interpreter) EvalError!EvalResult {
+pub fn evaluate(expr: *Expr, errorLine: *usize, interpreter: *Interpreter) EvalError!EvalResult {
     switch (expr.*) {
         .literal => |literal| return try evaluateLiteral(literal),
-        .grouping => |grouping| return try evaluateGrouping(grouping, errorLine, interpreter),
-        .unary => |unary| return try evaluateUnary(unary, errorLine, interpreter),
-        .binary => |binary| return try evaluateBinary(binary, errorLine, interpreter),
-        .identifier => |identifier| return try evaluateIdenfifier(identifier, errorLine, interpreter),
-        .assign => |assign| return try evaluateAssign(assign, errorLine, interpreter),
-        .call => |call| return try evaluateCall(call, errorLine, interpreter),
+        .grouping => |grouping| return try evaluateGrouping(grouping.*, errorLine, interpreter),
+        .unary => |unary| return try evaluateUnary(unary.*, errorLine, interpreter),
+        .binary => |binary| return try evaluateBinary(binary.*, errorLine, interpreter),
+        .identifier => |identifier| return try evaluateIdenfifier(expr, &identifier, errorLine, interpreter),
+        .assign => |assign| return try evaluateAssign(expr, assign.*, errorLine, interpreter),
+        .call => |call| return try evaluateCall(call.*, errorLine, interpreter),
     }
 }
 
@@ -66,7 +67,7 @@ fn evaluateCall(expr: Expr.CallExpr, errorLine: *usize, interpreter: *Interprete
             const function = callee.native_fn;
             var evaluatedArgs: [250]EvalResult = undefined;
             for (expr.args, 0..) |arg, i| {
-                evaluatedArgs[i] = try evaluate(&arg, errorLine, interpreter);
+                evaluatedArgs[i] = try evaluate(arg, errorLine, interpreter);
             }
             return function(&evaluatedArgs);
         },
@@ -80,19 +81,24 @@ fn evaluateCall(expr: Expr.CallExpr, errorLine: *usize, interpreter: *Interprete
     }
 }
 
-fn evaluateAssign(expr: Expr.AssignExpr, errorLine: *usize, interpreter: *Interpreter) EvalError!EvalResult {
-    const res = try evaluate(expr.left, errorLine, interpreter);
-    interpreter.environment.assign(expr.name.lexeme, res) catch {
-        return EvalError.AllocationError;
-    };
+fn evaluateAssign(expr_ptr: *Expr, expr: Expr.AssignExpr, errorLine: *usize, interpreter: *Interpreter) EvalError!EvalResult {
+    const value = try evaluate(expr.left, errorLine, interpreter);
+    const distance = interpreter.id_distance.get(expr_ptr) orelse @panic("var not found");
 
-    return res;
+    interpreter.environment.assignAt(distance, expr.name.lexeme, value);
+    return value;
 }
 
-fn evaluateIdenfifier(expr: Expr.Identifier, errorLine: *usize, interpreter: *Interpreter) EvalError!EvalResult {
+fn evaluateIdenfifier(expr_ptr: *Expr, expr: *const Expr.Identifier, errorLine: *usize, interpreter: *Interpreter) EvalError!EvalResult {
+    const distance = interpreter.id_distance.get(expr_ptr) orelse {
+        std.debug.print("Eval Line 95 \n", .{});
+        return EvalError.UndefinedVar;
+    };
+
     const name = expr.token.lexeme;
-    return interpreter.environment.get(name) orelse {
+    return interpreter.environment.getAt(distance, name) orelse {
         errorLine.* = expr.token.line;
+        std.debug.print("Eval Line 102 \n", .{});
         return EvalError.UndefinedVar;
     };
 }

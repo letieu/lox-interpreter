@@ -33,8 +33,8 @@ pub const AstPrinter = struct {
 
     pub fn printStatement(self: *const AstPrinter, stmt: *const parser.Statement) PrintError!void {
         switch (stmt.*) {
-            .expression => |exprStmt| try self.printExpression(&exprStmt.expr),
-            .print => |printStmt| try self.printPrint(&printStmt.expr),
+            .expression => |exprStmt| try self.printExpression(exprStmt.expr),
+            .print => |printStmt| try self.printPrint(printStmt.expr),
             .block => |block| try self.printBlockStmt(block),
             .ifStmt => |ifStmt| try self.printIfStmt(ifStmt),
             .while_stmt => |while_stmt| try self.printWhileStmt(while_stmt),
@@ -47,7 +47,7 @@ pub const AstPrinter = struct {
     pub fn printReturnStmt(self: *const AstPrinter, stmt: parser.Statement.ReturnStatement) PrintError!void {
         try self.write("(return ", .{});
         if (stmt.expr != null) {
-            try self.printExpression(&stmt.expr.?);
+            try self.printExpression(stmt.expr.?);
         }
         try self.write(" )", .{});
     }
@@ -58,21 +58,21 @@ pub const AstPrinter = struct {
             const decl = stmt.initial.?;
             try self.printDeclaration(decl);
         }
-        try self.printExpression(&stmt.condition);
+        try self.printExpression(stmt.condition);
         try self.printStatement(stmt.body);
         try self.write(")", .{});
     }
 
     pub fn printWhileStmt(self: *const AstPrinter, stmt: parser.Statement.WhileStatement) PrintError!void {
         try self.write("(while ", .{});
-        try self.printExpression(&stmt.condition);
+        try self.printExpression(stmt.condition);
         try self.printStatement(stmt.inner);
         try self.write(")", .{});
     }
 
     pub fn printIfStmt(self: *const AstPrinter, stmt: parser.Statement.IfStatement) PrintError!void {
         try self.write("(if ", .{});
-        try self.printExpression(&stmt.condition);
+        try self.printExpression(stmt.condition);
         try self.printStatement(stmt.inner);
         try self.write(")", .{});
     }
@@ -87,7 +87,7 @@ pub const AstPrinter = struct {
         try self.write("(var {s} ", .{var_decl.name});
         const maybeExpr = var_decl.initializer;
         if (maybeExpr != null) {
-            try self.printExpression(&maybeExpr.?);
+            try self.printExpression(maybeExpr.?);
         }
         try self.write(")", .{});
     }
@@ -110,7 +110,7 @@ pub const AstPrinter = struct {
             .unary => |group| try self.printUnary(group),
             .literal => |literal| try self.printLiteral(literal),
             .grouping => |group| try self.printGrouping(group),
-            .identifier => |identifier| try self.printIdentifier(identifier),
+            .identifier => |identifier| try self.printIdentifier(&identifier),
             .assign => |assign| try self.printAssign(assign),
             .call => |call| try self.printCall(call),
         }
@@ -126,17 +126,17 @@ pub const AstPrinter = struct {
         try self.write(" )", .{});
     }
 
-    pub fn printAssign(self: *const AstPrinter, expr: Expr.AssignExpr) PrintError!void {
+    pub fn printAssign(self: *const AstPrinter, expr: *const Expr.AssignExpr) PrintError!void {
         try self.write("(assign {s} ", .{expr.name.lexeme});
         try self.printExpression(expr.left);
         try self.write(" )", .{});
     }
 
-    pub fn printIdentifier(self: *const AstPrinter, expr: Expr.Identifier) PrintError!void {
+    pub fn printIdentifier(self: *const AstPrinter, expr: *const Expr.Identifier) PrintError!void {
         try self.write("{s}", .{expr.token.lexeme});
     }
 
-    pub fn printGrouping(self: *const AstPrinter, expr: Expr.GroupingExpr) PrintError!void {
+    pub fn printGrouping(self: *const AstPrinter, expr: *const Expr.GroupingExpr) PrintError!void {
         try self.write("(group ", .{});
         try self.printExpression(expr.expression);
         try self.write(")", .{});
@@ -158,7 +158,7 @@ pub const AstPrinter = struct {
         }
     }
 
-    pub fn printBinary(self: *const AstPrinter, expr: Expr.BinaryExpr) PrintError!void {
+    pub fn printBinary(self: *const AstPrinter, expr: *const Expr.BinaryExpr) PrintError!void {
         try self.write("({s} ", .{expr.operator.lexeme});
         try self.printExpression(expr.left);
         try self.write(" ", .{});
@@ -166,7 +166,7 @@ pub const AstPrinter = struct {
         try self.write(")", .{});
     }
 
-    pub fn printUnary(self: *const AstPrinter, expr: Expr.UnaryExpr) PrintError!void {
+    pub fn printUnary(self: *const AstPrinter, expr: *const Expr.UnaryExpr) PrintError!void {
         try self.write("({s} ", .{expr.operator.lexeme});
         try self.printExpression(expr.right);
         try self.write(")", .{});

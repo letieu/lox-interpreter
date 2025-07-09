@@ -17,7 +17,13 @@ fn doHi(comptime T: type, person: T) !void {
 }
 
 pub fn main() !void {
-    var sl: [3]usize = undefined;
-    sl[1] = 3;
-    std.debug.print("{d}", .{sl.len});
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const alloc = gpa.allocator();
+    var map = std.StringHashMap(usize).init(alloc);
+
+    var map2 = &map;
+
+    try map2.put("test", 3);
+
+    std.debug.print("{?}", .{map.get("test")});
 }

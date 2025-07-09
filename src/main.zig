@@ -1,9 +1,10 @@
 const std = @import("std");
 const scan = @import("scan.zig");
 const parse = @import("parse.zig");
-const astPrint = @import("ast-print.zig");
+const Expr = @import("parse.zig").Expr;
 const evaluate = @import("evaluate.zig");
 const Interpreter = @import("interpreter.zig").Intepreter;
+const Resolver = @import("resolve.zig").Resolver;
 
 const Command = enum {
     Tokenize,
@@ -18,15 +19,6 @@ const commands = std.StaticStringMap(Command).initComptime(.{
     .{ "evaluate", .Evaluate },
     .{ "run", .Run },
 });
-
-pub fn printAst(declarations: []parse.Declaration) !void {
-    const printer = astPrint.AstPrinter.init();
-
-    for (declarations) |declaration| {
-        try printer.printDeclaration(&declaration);
-    }
-    return;
-}
 
 pub fn main() !void {
     const args = try std.process.argsAlloc(std.heap.page_allocator);
@@ -64,12 +56,13 @@ pub fn main() !void {
     const declarations = parser.parse() catch {
         std.process.exit(65);
     };
-    if (command == Command.Parse) {
-        try printAst(declarations);
-        return;
-    }
 
-    var interpreter = Interpreter.init(declarations, alloc, stdOut, stdErr);
+    var resolver = Resolver.init(declarations, alloc);
+    const id_distance = resolver.resolve() catch {
+        try stdErr.writer().print("Resolve error", .{});
+        std.process.exit(65);
+    };
+    var interpreter = try Interpreter.init(declarations, id_distance, alloc, stdOut, stdErr);
     try interpreter.run();
 
     return;

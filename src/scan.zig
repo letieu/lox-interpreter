@@ -110,7 +110,7 @@ pub const Token = struct {
 
 pub const ScannerError = struct {
     message: []const u8,
-    line: u32,
+    line: usize,
 };
 
 pub const MatchResultType = enum {
@@ -128,9 +128,9 @@ pub const MatchResult = union(MatchResultType) {
 pub const Scanner = struct {
     source: []u8,
 
-    current_start: u32,
-    current_end: u32,
-    line: u32,
+    current_start: usize,
+    current_end: usize,
+    line: usize,
 
     pub fn init(source: []u8) Scanner {
         return .{

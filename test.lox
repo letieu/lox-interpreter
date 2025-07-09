@@ -1,7 +1,9 @@
-fun foo(a, b, c, d, e, f) {
-  return "BBB";
+var a = "value";
+
+var a = a;
+
+print a;
+
+if (true) {
+  return;
 }
-
-var b = foo();
-
-print(b);

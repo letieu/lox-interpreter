@@ -28,21 +28,20 @@ pub const Intepreter = struct {
     stdOut: std.fs.File,
     stdErr: std.fs.File,
 
-    environment: Environment,
+    environment: *Environment,
+    id_distance: std.AutoHashMap(*Expr, usize),
 
-    pub fn init(statements: []const Declaration, alloc: std.mem.Allocator, stdOut: std.fs.File, stdErr: std.fs.File) Intepreter {
+    pub fn init(statements: []const Declaration, id_distance: std.AutoHashMap(*Expr, usize), alloc: std.mem.Allocator, stdOut: std.fs.File, stdErr: std.fs.File) !Intepreter {
+        const env = try Environment.init(alloc, null);
         var interpreter = Intepreter{
             .declarations = statements,
             .alloc = alloc,
             .stdOut = stdOut,
             .stdErr = stdErr,
-            .environment = Environment.init(alloc, null) catch {
-                std.debug.print("Failed to init environment", .{});
-            },
+            .environment = env,
+            .id_distance = id_distance,
         };
-        interpreter.initNativeFn() catch {
-            std.debug.print("Failed to init environment var", .{});
-        };
+        try interpreter.initNativeFn();
         return interpreter;
     }
 
@@ -52,84 +51,82 @@ pub const Intepreter = struct {
 
     pub fn run(self: *Intepreter) !void {
         for (self.declarations) |decl| {
-            _ = try self.execDecl(decl);
+            _ = try self.execDecl(&decl);
         }
     }
 
-    pub fn runBlock(self: *Intepreter, block: Statement.BlockStatement, env: Environment) EvalError!EvalResult {
+    pub fn runBlock(self: *Intepreter, block: *Statement.BlockStatement, env: *Environment) EvalError!EvalResult {
         const prevEnv = self.environment;
         self.environment = env;
+        defer self.environment = prevEnv;
 
-        for (block.declarations) |decl| {
+        for (block.declarations) |*decl| {
             const result = try self.execDecl(decl);
             if (result == .return_value) {
-                self.environment = prevEnv;
                 return result.return_value;
             }
         }
 
-        self.environment = prevEnv;
         return EvalResult.nil;
     }
 
-    fn execDecl(self: *Intepreter, decl: Declaration) EvalError!StmtResult {
-        switch (decl) {
-            .var_decl => |var_declaration| {
+    fn execDecl(self: *Intepreter, decl: *const Declaration) EvalError!StmtResult {
+        switch (decl.*) {
+            .var_decl => |*var_declaration| {
                 try self.execVarDecl(var_declaration);
                 return StmtResult.none;
             },
-            .function_decl => |fun_decl| {
+            .function_decl => |*fun_decl| {
                 try self.execFunDecl(fun_decl);
                 return StmtResult.none;
             },
             .stmt => |exprStmt| {
-                return try self.execStmt(exprStmt);
+                return try self.execStmt(&exprStmt);
             },
         }
     }
 
-    fn execStmt(self: *Intepreter, stmt: Statement) EvalError!StmtResult {
-        switch (stmt) {
-            .block => |blockStmt| {
+    fn execStmt(self: *Intepreter, stmt: *const Statement) EvalError!StmtResult {
+        switch (stmt.*) {
+            .block => |*blockStmt| {
                 return self.execBlock(blockStmt);
             },
-            .print => |printStmt| {
+            .print => |*printStmt| {
                 try self.execPrint(printStmt);
                 return .none;
             },
-            .ifStmt => |ifStmt| {
+            .ifStmt => |*ifStmt| {
                 return self.execIfStmt(ifStmt);
             },
-            .while_stmt => |while_stmt| {
+            .while_stmt => |*while_stmt| {
                 return self.execWhileStmt(while_stmt);
             },
-            .for_stmt => |for_stmt| {
+            .for_stmt => |*for_stmt| {
                 return self.execForStmt(for_stmt);
             },
-            .return_stmt => |return_stmt| {
+            .return_stmt => |*return_stmt| {
                 return try self.execReturnStmt(return_stmt);
             },
-            .expression => |expr_stmt| {
+            .expression => |*expr_stmt| {
                 _ = try self.execExpr(expr_stmt.expr);
                 return .none;
             },
         }
     }
 
-    fn execBlock(self: *Intepreter, block: Statement.BlockStatement) !StmtResult {
-        var prevEnv = self.environment;
-        const blockEnv = try Environment.init(self.alloc, &prevEnv);
+    fn execBlock(self: *Intepreter, block: *const Statement.BlockStatement) !StmtResult {
+        const prevEnv = self.environment;
+        const blockEnv = try Environment.init(self.alloc, prevEnv);
         self.environment = blockEnv;
+        defer self.environment = prevEnv;
 
-        for (block.declarations) |decl| {
+        for (block.declarations) |*decl| {
             const result = try self.execDecl(decl);
             if (result == .return_value) {
-                self.environment = prevEnv;
                 return result;
             }
         }
 
-        self.environment = prevEnv;
         return .none;
     }
 
@@ -145,34 +142,34 @@ pub const Intepreter = struct {
         self.printErr("[line {d}]", .{errorLine.*});
     }
 
-    fn execReturnStmt(self: *Intepreter, stmt: Statement.ReturnStatement) !StmtResult {
-        if (stmt.expr != null) {
-            const result = try self.execExpr(stmt.expr.?);
+    fn execReturnStmt(self: *Intepreter, stmt: *const Statement.ReturnStatement) !StmtResult {
+        if (stmt.expr) |expr| {
+            const result = try self.execExpr(expr);
             return StmtResult{ .return_value = result };
         }
 
         return StmtResult{ .return_value = EvalResult.nil };
     }
 
-    fn execForStmt(self: *Intepreter, stmt: Statement.ForStatement) !StmtResult {
-        if (stmt.initial != null) {
-            _ = try self.execDecl(stmt.initial.?.*);
+    fn execForStmt(self: *Intepreter, stmt: *const Statement.ForStatement) !StmtResult {
+        if (stmt.initial) |initial| {
+            _ = try self.execDecl(initial);
         }
         while (isTruthy(try self.execExpr(stmt.condition))) {
-            const result = try self.execStmt(stmt.body.*);
+            const result = try self.execStmt(stmt.body);
             if (result == .return_value) return result;
 
-            if (stmt.increment != null) {
-                _ = try self.execExpr(stmt.increment.?);
+            if (stmt.increment) |increment| {
+                _ = try self.execExpr(increment);
             }
         }
 
         return .none;
     }
 
-    fn execWhileStmt(self: *Intepreter, stmt: Statement.WhileStatement) !StmtResult {
+    fn execWhileStmt(self: *Intepreter, stmt: *const Statement.WhileStatement) !StmtResult {
         while (isTruthy(try self.execExpr(stmt.condition))) {
-            const result = try self.execStmt(stmt.inner.*);
+            const result = try self.execStmt(stmt.inner);
             if (result == .return_value) {
                 return result;
             }
@@ -181,26 +178,26 @@ pub const Intepreter = struct {
         return .none;
     }
 
-    fn execIfStmt(self: *Intepreter, stmt: Statement.IfStatement) !StmtResult {
+    fn execIfStmt(self: *Intepreter, stmt: *const Statement.IfStatement) !StmtResult {
         const conditional_result = try self.execExpr(stmt.condition);
 
         if (isTruthy(conditional_result)) {
-            return try self.execStmt(stmt.inner.*);
+            return try self.execStmt(stmt.inner);
         } else {
-            if (stmt.elseStmt != null) {
-                return try self.execStmt(stmt.elseStmt.?.*);
+            if (stmt.elseStmt) |else_stmt| {
+                return try self.execStmt(else_stmt);
             }
         }
 
         return .none;
     }
 
-    fn execPrint(self: *Intepreter, stmt: Statement.PrintStatement) !void {
+    fn execPrint(self: *Intepreter, stmt: *const Statement.PrintStatement) !void {
         const result = try self.execExpr(stmt.expr);
 
         switch (result) {
             .native_fn => self.printOut("hihi", .{}),
-            .user_fn => self.printOut("<fn {s}>", .{stmt.expr.identifier.token.lexeme}),
+            .user_fn => self.printOut("<fn {s}>", .{stmt.expr.*.identifier.token.lexeme}),
             .boolean => self.printOut("{?}", .{result.boolean}),
             .number => self.printOut("{d}", .{result.number}),
             .string => self.printOut("{s}", .{result.string}),
@@ -210,7 +207,7 @@ pub const Intepreter = struct {
         self.printOut("\n", .{});
     }
 
-    fn execFunDecl(self: *Intepreter, decl: FunctionDecl) !void {
+    fn execFunDecl(self: *Intepreter, decl: *const FunctionDecl) !void {
         const user_fn = UserFunction{
             .closure = self.environment,
             .body_block = decl.function.body,
@@ -220,7 +217,8 @@ pub const Intepreter = struct {
         try self.environment.define(decl.function.name, EvalResult{ .user_fn = user_fn });
     }
 
-    fn execVarDecl(self: *Intepreter, decl: VarDecl) !void {
+
+    fn execVarDecl(self: *Intepreter, decl: *const VarDecl) !void {
         const initializer = decl.initializer;
         if (initializer == null) {
             try self.environment.define(decl.name, EvalResult.nil);
@@ -231,14 +229,13 @@ pub const Intepreter = struct {
         try self.environment.define(decl.name, result);
     }
 
-    fn execExpr(self: *Intepreter, expr: Expr) !EvalResult {
+    fn execExpr(self: *Intepreter, expr: *Expr) !EvalResult {
         var errorLine: usize = 0;
-        return evaluate(&expr, &errorLine, self) catch |e| {
+        return evaluate(expr, &errorLine, self) catch |e| {
             self.printEvalError(e, &errorLine) catch {
                 std.debug.print("print error", .{});
             };
             std.process.exit(70);
-            return;
         };
     }
 
