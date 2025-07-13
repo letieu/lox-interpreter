@@ -15,6 +15,46 @@ pub const EvalResult = union(enum) {
     nil,
     native_fn: NativeFunction,
     user_fn: UserFunction,
+    class: *Class,
+    instance: *Instance,
+};
+
+pub const Instance = struct {
+    class: *const Class,
+    fields: std.StringHashMap(EvalResult),
+
+    pub fn init(class: *const Class, alloc: std.mem.Allocator) !Instance {
+        return Instance{ .class = class, .fields = std.StringHashMap(EvalResult).init(alloc) };
+    }
+
+    pub fn get(self: *Instance, name: []const u8) !EvalResult {
+        return self.fields.get(name) orelse {
+            std.debug.print("Null on get {s}", .{name});
+            return EvalResult.nil;
+        };
+    }
+
+    pub fn set(self: *Instance, name: []const u8, value: EvalResult) !void {
+        return self.fields.put(name, value);
+    }
+};
+
+pub const Class = struct {
+    name: []const u8,
+    alloc: std.mem.Allocator,
+
+    pub fn init(name: []const u8, alloc: std.mem.Allocator) Class {
+        return Class{
+            .name = name,
+            .alloc = alloc,
+        };
+    }
+
+    pub fn call(self: *const Class) EvalError!EvalResult {
+        const instance_ptr = try self.alloc.create(Instance);
+        instance_ptr.* = try Instance.init(self, self.alloc);
+        return EvalResult{ .instance = instance_ptr };
+    }
 };
 
 pub const NativeFunction = *const fn (args: []const EvalResult) EvalError!EvalResult;
@@ -57,7 +97,39 @@ pub fn evaluate(expr: *Expr, errorLine: *usize, interpreter: *Interpreter) EvalE
         .identifier => |identifier| return try evaluateIdenfifier(expr, &identifier, errorLine, interpreter),
         .assign => |assign| return try evaluateAssign(expr, assign.*, errorLine, interpreter),
         .call => |call| return try evaluateCall(call.*, errorLine, interpreter),
+        .get => |get| return try evaluateGet(get.*, errorLine, interpreter),
+        .set => |set| return try evaluateSet(set.*, errorLine, interpreter),
     }
+}
+
+fn evaluateSet(expr: Expr.SetExpr, errorLine: *usize, interpreter: *Interpreter) EvalError!EvalResult {
+    var object = try evaluate(expr.object, errorLine, interpreter);
+    switch (object) {
+        .instance => {
+            const value = try evaluate(expr.value, errorLine, interpreter);
+            try object.instance.set(expr.name.lexeme, value);
+            return EvalResult.nil;
+        },
+        else => {
+            errorLine.* = expr.name.line;
+            return EvalError.Invalid;
+        },
+    }
+    return object;
+}
+
+fn evaluateGet(expr: Expr.GetExpr, errorLine: *usize, interpreter: *Interpreter) EvalError!EvalResult {
+    var object = try evaluate(expr.object, errorLine, interpreter);
+    switch (object) {
+        .instance => {
+            return object.instance.get(expr.name.lexeme);
+        },
+        else => {
+            errorLine.* = expr.name.line;
+            return EvalError.Invalid;
+        },
+    }
+    return object;
 }
 
 fn evaluateCall(expr: Expr.CallExpr, errorLine: *usize, interpreter: *Interpreter) EvalError!EvalResult {
@@ -74,6 +146,9 @@ fn evaluateCall(expr: Expr.CallExpr, errorLine: *usize, interpreter: *Interprete
         .user_fn => {
             var function = callee.user_fn;
             return function.call(errorLine, interpreter, expr.args);
+        },
+        .class => |class| {
+            return class.call();
         },
         else => {
             return EvalError.Invalid;
@@ -248,5 +323,7 @@ pub fn isTruthy(value: EvalResult) bool {
         .nil => return false,
         .native_fn => return true,
         .user_fn => return true,
+        .class => return true,
+        .instance => return true,
     }
 }

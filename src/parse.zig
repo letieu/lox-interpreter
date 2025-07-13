@@ -5,7 +5,8 @@ const TokenType = scan.TokenType;
 const Token = scan.Token;
 
 // program        → declaration* EOF ;
-// declaration    → functionDecl | varDecl | statement ;
+// declaration    → classDecl | functionDecl | varDecl | statement ;
+// classDecl      → "class" IDENTIFIER "{" function* "}" ;
 // functionDecl   → "fun" function ;
 // function       → IDENTIFIER "(" paramaters? ")" block ;
 // paramaters     → IDENTIFIER (, IDENTIFIER)* ;
@@ -20,7 +21,7 @@ const Token = scan.Token;
 // printStmt      → "print" expression ";" ;
 // exprStmt       → expression ";" ;
 // expression     → assignment ;
-// assignment     → IDENTIFIER "=" assignment
+// assignment     → (call ".") IDENTIFIER "=" assignment
 //                  | AND ;
 // AND            → OR ( and OR )* ;
 // OR             → equality ( or equality )* ;
@@ -30,7 +31,7 @@ const Token = scan.Token;
 // factor         → unary ( ( "/" | "*" ) unary )* ;
 // unary          → ( "!" | "-" ) unary
 //                | primary ;
-// call           → primary ( "(" arguments? ")" )* ;
+// call           → primary ( "(" arguments? ")" | "." IDENTIFIER )* ;
 // arguments      → expression ( "," expression )* ;
 // primary        → NUMBER | STRING | "true" | "false" | "nil"
 //                | "(" expression ")"
@@ -40,7 +41,7 @@ pub const Declaration = union(enum) {
     var_decl: VarDecl,
     stmt: Statement,
     function_decl: FunctionDecl,
-    // class_decl: ClassDecl,
+    class_decl: ClassDecl,
 };
 
 pub const VarDecl = struct {
@@ -50,6 +51,11 @@ pub const VarDecl = struct {
 
 pub const FunctionDecl = struct {
     function: Function,
+};
+
+pub const ClassDecl = struct {
+    name: []const u8,
+    methods: []const Function,
 };
 
 pub const Function = struct {
@@ -84,6 +90,8 @@ pub const Expr = union(enum) {
     binary: *BinaryExpr,
     grouping: *GroupingExpr,
     call: *CallExpr,
+    get: *GetExpr,
+    set: *SetExpr,
 
     pub const LiteralType = enum {
         NUMBER,
@@ -129,6 +137,17 @@ pub const Expr = union(enum) {
         callee: *Expr,
         paren: Token,
         args: []*Expr,
+    };
+
+    pub const GetExpr = struct {
+        object: *Expr,
+        name: Token,
+    };
+
+    pub const SetExpr = struct {
+        object: *Expr,
+        name: Token,
+        value: *Expr,
     };
 };
 
@@ -228,8 +247,25 @@ pub const Parser = struct {
         if (self.is(scan.TokenType.FUN)) {
             return Declaration{ .function_decl = try self.parseFunctionDecl() };
         }
+        if (self.is(scan.TokenType.CLASS)) {
+            return Declaration{ .class_decl = try self.parseClassDecl() };
+        }
 
         return Declaration{ .stmt = try self.parseStatement() };
+    }
+
+    fn parseClassDecl(self: *Parser) ParseError!ClassDecl {
+        // classDecl      → "class" IDENTIFIER "{" function* "}" ;
+        _ = try self.consume(TokenType.CLASS);
+        const name = try self.consume(TokenType.IDENTIFIER);
+        var methods = std.ArrayList(Function).init(self.alloc);
+        _ = try self.consume(TokenType.LEFT_BRACE);
+        while (!self.is(TokenType.RIGHT_BRACE)) {
+            const function = try self.parseFunction();
+            try methods.append(function);
+        }
+        _ = try self.consume(TokenType.RIGHT_BRACE);
+        return ClassDecl{ .name = name.lexeme, .methods = try methods.toOwnedSlice() };
     }
 
     fn parseFunctionDecl(self: *Parser) ParseError!FunctionDecl {
@@ -442,7 +478,7 @@ pub const Parser = struct {
     }
 
     fn parseAssignment(self: *Parser) ParseError!*Expr {
-        // [R] assignment → IDENTIFIER "=" assignment
+        // [R] assignment → (call ".")? IDENTIFIER "=" assignment
         //                  | logic_or ;
         const expr = try self.parseOr();
 
@@ -450,19 +486,34 @@ pub const Parser = struct {
             self.advance();
             const value = try self.parseAssignment();
 
-            if (expr.* != .identifier) {
-                return ParseError.InvalidAssignmentTarget;
+            switch (expr.*) {
+                .identifier => {
+                    // abc = 123;
+                    const assign_expr = try self.alloc.create(Expr.AssignExpr);
+                    assign_expr.* = .{
+                        .name = expr.*.identifier.token,
+                        .left = value,
+                    };
+
+                    const result_expr = try self.alloc.create(Expr);
+                    result_expr.* = .{ .assign = assign_expr };
+                    return result_expr;
+                },
+                .get => {
+                    const set_expr = try self.alloc.create(Expr.SetExpr);
+                    set_expr.* = Expr.SetExpr{
+                        .object = expr.*.get.object,
+                        .name = expr.*.get.name,
+                        .value = value,
+                    };
+                    const result_expr = try self.alloc.create(Expr);
+                    result_expr.* = Expr{ .set = set_expr };
+                    return result_expr;
+                },
+                else => {
+                    return ParseError.InvalidAssignmentTarget;
+                },
             }
-
-            const assign_expr = try self.alloc.create(Expr.AssignExpr);
-            assign_expr.* = .{
-                .name = expr.*.identifier.token,
-                .left = value,
-            };
-
-            const result_expr = try self.alloc.create(Expr);
-            result_expr.* = .{ .assign = assign_expr };
-            return result_expr;
         }
 
         return expr;
@@ -597,39 +648,60 @@ pub const Parser = struct {
     }
 
     fn parseCall(self: *Parser) ParseError!*Expr {
+        // call           → primary ( "(" arguments? ")" | "." IDENTIFIER )* ;
+        // abc(a1).aokk.xyz();
         var expr = try self.parsePrimary();
 
-        while (self.is(TokenType.LEFT_PAREN)) {
-            _ = try self.consume(TokenType.LEFT_PAREN);
-            var args = std.ArrayList(*Expr).init(self.alloc);
-            defer args.deinit();
+        while (true) {
+            if (self.is(TokenType.LEFT_PAREN)) {
+                expr = try self.finishCall(expr);
+            } else if (self.is(TokenType.DOT)) {
+                _ = try self.consume(TokenType.DOT);
+                const name = try self.consume(TokenType.IDENTIFIER);
 
-            if (!self.is(TokenType.RIGHT_PAREN)) {
-                while (true) {
-                    try args.append(try self.parseExpression());
-                    if (self.is(TokenType.COMMA)) {
-                        self.advance();
-                    } else {
-                        break;
-                    }
-                }
+                const get_expr = try self.alloc.create(Expr.GetExpr);
+                get_expr.* = Expr.GetExpr{ .name = name, .object = expr };
+
+                const new_expr = try self.alloc.create(Expr);
+                new_expr.* = Expr{ .get = get_expr };
+
+                expr = new_expr;
+            } else {
+                break;
             }
-
-            const paren = try self.consume(TokenType.RIGHT_PAREN);
-
-            const call_expr = try self.alloc.create(Expr.CallExpr);
-            call_expr.* = .{
-                .callee = expr,
-                .paren = paren,
-                .args = try args.toOwnedSlice(),
-            };
-
-            const result_expr = try self.alloc.create(Expr);
-result_expr.* = .{ .call = call_expr };
-            expr = result_expr;
         }
 
         return expr;
+    }
+
+    fn finishCall(self: *Parser, expr: *Expr) ParseError!*Expr {
+        _ = try self.consume(TokenType.LEFT_PAREN);
+        var args = std.ArrayList(*Expr).init(self.alloc);
+        defer args.deinit();
+
+        if (!self.is(TokenType.RIGHT_PAREN)) {
+            while (true) {
+                try args.append(try self.parseExpression());
+                if (self.is(TokenType.COMMA)) {
+                    self.advance();
+                } else {
+                    break;
+                }
+            }
+        }
+
+        const paren = try self.consume(TokenType.RIGHT_PAREN);
+
+        const call_expr = try self.alloc.create(Expr.CallExpr);
+        call_expr.* = .{
+            .callee = expr,
+            .paren = paren,
+            .args = try args.toOwnedSlice(),
+        };
+
+        const result_expr = try self.alloc.create(Expr);
+        result_expr.* = .{ .call = call_expr };
+        return result_expr;
     }
 
     fn parsePrimary(self: *Parser) ParseError!*Expr {

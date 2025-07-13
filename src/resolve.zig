@@ -2,6 +2,7 @@ const std = @import("std");
 const Declaration = @import("parse.zig").Declaration;
 const VarDecl = @import("parse.zig").VarDecl;
 const FunctionDecl = @import("parse.zig").FunctionDecl;
+const ClassDecl = @import("parse.zig").ClassDecl;
 const Statement = @import("parse.zig").Statement;
 const Expr = @import("parse.zig").Expr;
 
@@ -35,8 +36,14 @@ pub const Resolver = struct {
         switch (declaration.*) {
             .var_decl => |*var_decl| try self.resolveVarDeclaration(var_decl),
             .function_decl => |*func_decl| try self.resolveFunDeclaration(func_decl),
+            .class_decl => |*class_decl| try self.resolveClassDeclaration(class_decl),
             .stmt => |*stmt| try self.resolveStatement(stmt, is_in_function),
         }
+    }
+
+    fn resolveClassDeclaration(self: *Resolver, class_decl: *const ClassDecl) !void {
+        try self.declare(class_decl.name);
+        try self.define(class_decl.name);
     }
 
     fn resolveFunDeclaration(self: *Resolver, fun_decl: *const FunctionDecl) !void {
@@ -138,7 +145,14 @@ pub const Resolver = struct {
                     try self.resolveExpr(arg);
                 }
             },
-            else => {},
+            .get => |get| {
+                try self.resolveExpr(get.object);
+            },
+            .set => |set| {
+                try self.resolveExpr(set.object);
+                try self.resolveExpr(set.value);
+            },
+            .literal => {},
         }
     }
 

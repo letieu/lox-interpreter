@@ -1,9 +1,6 @@
-var a = "value";
-
-var a = a;
-
-print a;
-
-if (true) {
-  return;
+class A {
 }
+
+var a = A();
+print "hih ";
+print a;

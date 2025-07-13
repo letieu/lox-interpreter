@@ -3,12 +3,14 @@ const Expr = @import("parse.zig").Expr;
 const Declaration = @import("parse.zig").Declaration;
 const VarDecl = @import("parse.zig").VarDecl;
 const FunctionDecl = @import("parse.zig").FunctionDecl;
+const ClassDecl = @import("parse.zig").ClassDecl;
 const Environment = @import("environment.zig").Environment;
 
 const std = @import("std");
 const evaluate = @import("evaluate.zig").evaluate;
 const EvalResult = @import("evaluate.zig").EvalResult;
 const UserFunction = @import("evaluate.zig").UserFunction;
+const Class = @import("evaluate.zig").Class;
 const EvalError = @import("evaluate.zig").EvalError;
 const isTruthy = @import("evaluate.zig").isTruthy;
 
@@ -78,6 +80,10 @@ pub const Intepreter = struct {
             },
             .function_decl => |*fun_decl| {
                 try self.execFunDecl(fun_decl);
+                return StmtResult.none;
+            },
+            .class_decl => |*class_decl| {
+                try self.execClassDecl(class_decl);
                 return StmtResult.none;
             },
             .stmt => |exprStmt| {
@@ -196,15 +202,24 @@ pub const Intepreter = struct {
         const result = try self.execExpr(stmt.expr);
 
         switch (result) {
-            .native_fn => self.printOut("hihi", .{}),
+            .native_fn => self.printOut("fn", .{}),
             .user_fn => self.printOut("<fn {s}>", .{stmt.expr.*.identifier.token.lexeme}),
             .boolean => self.printOut("{?}", .{result.boolean}),
             .number => self.printOut("{d}", .{result.number}),
             .string => self.printOut("{s}", .{result.string}),
             .nil => self.printOut("nil", .{}),
+            .class => self.printOut("{s}", .{result.class.name}),
+            .instance => self.printOut("{s} instance", .{result.instance.class.name}),
         }
 
         self.printOut("\n", .{});
+    }
+
+    fn execClassDecl(self: *Intepreter, decl: *const ClassDecl) !void {
+        try self.environment.define(decl.name, EvalResult.nil);
+        const class_ptr = try self.alloc.create(Class);
+        class_ptr.* = Class.init(decl.name, self.alloc);
+        try self.environment.assign(decl.name, EvalResult{ .class = class_ptr });
     }
 
     fn execFunDecl(self: *Intepreter, decl: *const FunctionDecl) !void {
@@ -216,7 +231,6 @@ pub const Intepreter = struct {
 
         try self.environment.define(decl.function.name, EvalResult{ .user_fn = user_fn });
     }
-
 
     fn execVarDecl(self: *Intepreter, decl: *const VarDecl) !void {
         const initializer = decl.initializer;
